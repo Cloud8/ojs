@@ -1,9 +1,9 @@
 {**
  * templates/controllers/grid/settings/section/form/sectionForm.tpl
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * Section form under journal management.
  *}
@@ -15,19 +15,15 @@
 	{rdelim});
 </script>
 
-<form class="pkp_form" id="sectionForm" method="post" action="{url router=$smarty.const.ROUTE_COMPONENT component="grid.settings.sections.SectionGridHandler" op="updateSection" sectionId=$sectionId}">
+<form class="pkp_form" id="sectionForm" method="post" action="{url router=\PKP\core\PKPApplication::ROUTE_COMPONENT component="grid.settings.sections.SectionGridHandler" op="updateSection" sectionId=$sectionId}">
 	{csrf}
-	<input type="hidden" name="sectionId" value="{$sectionId|escape}"/>
+	<input type="hidden" name="sectionId" value="{$sectionId|default:""|escape}"/>
 
 	{include file="controllers/notification/inPlaceNotification.tpl" notificationId="sectionFormNotification"}
 
-	{if $sectionEditorCount == 0}
-		<span class="pkp_form_error"><p>{translate key="manager.section.noSectionEditors"}</p></span>
-	{/if}
-
 	{fbvFormArea id="sectionInfo"}
 		{fbvFormSection}
-			{fbvElement type="text" multilingual=true id="title" label="section.title" value=$title maxlength="80" size=$fbvStyles.size.MEDIUM inline=true required=true}
+			{fbvElement type="text" multilingual=true id="title" label="section.title" value=$title size=$fbvStyles.size.MEDIUM inline=true required=true}
 			{fbvElement type="text" multilingual=true id="abbrev" label="section.abbreviation" value=$abbrev maxlength="80" size=$fbvStyles.size.SMALL inline=true required=true}
 		{/fbvFormSection}
 
@@ -41,15 +37,18 @@
 			{fbvElement type="text" id="wordCount" value=$wordCount maxlength="80" label="manager.sections.wordCountInstructions"}
 		{/fbvFormSection}
 
-		{fbvFormSection title="submission.reviewForm" for="reviewFormId" inline=true size=$fbvStyles.size.MEDIUM}
-			{fbvElement type="select" id="reviewFormId" defaultLabel="manager.reviewForms.noneChosen"|translate defaultValue="" from=$reviewFormOptions selected=$reviewFormId translate=false size=$fbvStyles.size.MEDIUM inline=true}
-		{/fbvFormSection}
+		{if count($reviewFormOptions)>0}
+			{fbvFormSection title="submission.reviewForm" for="reviewFormId" inline=true size=$fbvStyles.size.MEDIUM}
+				{fbvElement type="select" id="reviewFormId" defaultLabel="manager.reviewForms.noneChosen"|translate defaultValue="" from=$reviewFormOptions selected=$reviewFormId translate=false size=$fbvStyles.size.MEDIUM inline=true}
+			{/fbvFormSection}
+		{/if}
 
 		{call_hook name="Templates::Manager::Sections::SectionForm::AdditionalMetadata" sectionId=$sectionId}
 	{/fbvFormArea}
 
-	{fbvFormArea id="indexingInfo" title="submission.indexing"}
+	{fbvFormArea id="indexingInfo" title="submission.sectionOptions"}
 		{fbvFormSection list=true}
+			{fbvElement type="checkbox" id="isInactive" checked=$isInactive label="manager.sections.form.deactivateSection"}
 			{fbvElement type="checkbox" id="metaReviewed" checked=$metaReviewed label="manager.sections.submissionReview"}
 			{fbvElement type="checkbox" id="abstractsNotRequired" checked=$abstractsNotRequired label="manager.sections.abstractsNotRequired"}
 			{fbvElement type="checkbox" id="metaIndexed" checked=$metaIndexed label="manager.sections.submissionIndexing"}
@@ -63,10 +62,13 @@
 		{/fbvFormSection}
 	{/fbvFormArea}
 
-	{fbvFormSection for="context" size=$fbvStyles.size.LARGE}
-		{if $sectionEditorCount > 0}{* only include the section editor listbuilder if there are section editors available *}
-			{url|assign:sectionEditorsUrl router=$smarty.const.ROUTE_COMPONENT component="listbuilder.settings.SubEditorsListbuilderHandler" op="fetch" sectionId=$sectionId escape=false}
-			{load_url_in_div id="sectionEditorsContainer" url=$sectionEditorsUrl}
+	{fbvFormSection list=true title="user.role.subEditors"}
+		{if count($subeditors)}
+			{foreach from=$subeditors item="subeditor" key="id"}
+				{fbvElement type="checkbox" id="subEditors[]" value=$id checked=in_array($id, $assignedSubeditors) label=$subeditor|escape translate=false}
+			{/foreach}
+		{else}
+			<span class="pkp_form_error"><p>{translate key="manager.section.noSectionEditors"}</p></span>
 		{/if}
 	{/fbvFormSection}
 

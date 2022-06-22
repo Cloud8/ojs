@@ -3,9 +3,9 @@
 /**
  * @file plugins/generic/announcementFeed/AnnouncementFeedBlockPlugin.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class AnnouncementFeedBlockPlugin
  * @ingroup plugins_generic_announcementFeed
@@ -13,95 +13,93 @@
  * @brief Class for block component of announcement feed plugin
  */
 
-import('lib.pkp.classes.plugins.BlockPlugin');
+use PKP\plugins\BlockPlugin;
 
-class AnnouncementFeedBlockPlugin extends BlockPlugin {
-	var $parentPluginName;
+class AnnouncementFeedBlockPlugin extends BlockPlugin
+{
+    protected $_parentPlugin;
 
-	/**
-	 * Constructor
-	 */
-	function __construct($parentPluginName) {
-		$this->parentPluginName = $parentPluginName;
-		parent::__construct();
-	}
+    /**
+     * Constructor
+     *
+     * @param AnnouncementFeedPlugin $parentPlugin
+     */
+    public function __construct($parentPlugin)
+    {
+        $this->_parentPlugin = $parentPlugin;
+        parent::__construct();
+    }
 
-	/**
-	 * Hide this plugin from the management interface (it's subsidiary)
-	 */
-	function getHideManagement() {
-		return true;
-	}
+    /**
+     * Hide this plugin from the management interface (it's subsidiary)
+     */
+    public function getHideManagement()
+    {
+        return true;
+    }
 
-	/**
-	 * Get the name of this plugin. The name must be unique within
-	 * its category.
-	 * @return String name of plugin
-	 */
-	function getName() {
-		return 'AnnouncementFeedBlockPlugin';
-	}
+    /**
+     * Get the name of this plugin. The name must be unique within
+     * its category.
+     *
+     * @return string name of plugin
+     */
+    public function getName()
+    {
+        return 'AnnouncementFeedBlockPlugin';
+    }
 
-	/**
-	 * Get the display name of this plugin.
-	 * @return String
-	 */
-	function getDisplayName() {
-		return __('plugins.generic.announcementfeed.displayName');
-	}
+    /**
+     * Get the display name of this plugin.
+     *
+     * @return string
+     */
+    public function getDisplayName()
+    {
+        return __('plugins.generic.announcementfeed.displayName');
+    }
 
-	/**
-	 * Get a description of the plugin.
-	 */
-	function getDescription() {
-		return __('plugins.generic.announcementfeed.description');
-	}
+    /**
+     * Get a description of the plugin.
+     */
+    public function getDescription()
+    {
+        return __('plugins.generic.announcementfeed.description');
+    }
 
-	/**
-	 * Get the announcement feed plugin
-	 * @return object
-	 */
-	function &getAnnouncementFeedPlugin() {
-		$plugin =& PluginRegistry::getPlugin('generic', $this->parentPluginName);
-		return $plugin;
-	}
+    /**
+     * Override the builtin to get the correct plugin path.
+     *
+     * @return string
+     */
+    public function getPluginPath()
+    {
+        return $this->_parentPlugin->getPluginPath();
+    }
 
-	/**
-	 * Override the builtin to get the correct plugin path.
-	 * @return string
-	 */
-	function getPluginPath() {
-		$plugin =& $this->getAnnouncementFeedPlugin();
-		return $plugin->getPluginPath();
-	}
+    /**
+     * @see BlockPlugin::getContents
+     *
+     * @param null|mixed $request
+     */
+    public function getContents($templateMgr, $request = null)
+    {
+        $journal = $request->getJournal();
+        if (!$journal) {
+            return '';
+        }
 
-	/**
-	 * @copydoc PKPPlugin::getTemplatePath
-	 */
-	function getTemplatePath($inCore = false) {
-		$plugin = $this->getAnnouncementFeedPlugin();
-		return $plugin->getTemplatePath($inCore) . 'templates/';
-	}
+        if (!$journal->getData('enableAnnouncements')) {
+            return '';
+        }
 
-	/**
-	 * @see BlockPlugin::getContents
-	 */
-	function getContents(&$templateMgr, $request = null) {
-		$journal = $request->getJournal();
-		if (!$journal) return '';
+        $displayPage = $this->_parentPlugin->getSetting($journal->getId(), 'displayPage');
+        $requestedPage = $request->getRequestedPage();
 
-		if (!$journal->getSetting('enableAnnouncements')) return '';
-
-		$plugin =& $this->getAnnouncementFeedPlugin();
-		$displayPage = $plugin->getSetting($journal->getId(), 'displayPage');
-		$requestedPage = $request->getRequestedPage();
-
-		if (($displayPage == 'all') || ($displayPage == 'homepage' && (empty($requestedPage) || $requestedPage == 'index' || $requestedPage == 'announcement')) || ($displayPage == $requestedPage)) {
-			return parent::getContents($templateMgr, $request);
-		} else {
-			return '';
-		}
-	}
+        if (($displayPage == 'all') || ($displayPage == 'homepage' && (empty($requestedPage) || $requestedPage == 'index' || $requestedPage == 'announcement')) || ($displayPage == $requestedPage)) {
+            return parent::getContents($templateMgr, $request);
+        } else {
+            return '';
+        }
+    }
 }
-
-?>

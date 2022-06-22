@@ -3,9 +3,9 @@
 /**
  * @file pages/manageIssues/ManageIssuesHandler.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class IssueManagementHandler
  * @ingroup pages_editor
@@ -13,62 +13,58 @@
  * @brief Handle requests for issue management in publishing.
  */
 
-import('classes.handler.Handler');
+use APP\handler\Handler;
+use APP\template\TemplateManager;
+use PKP\security\authorization\PKPSiteAccessPolicy;
+use PKP\security\Role;
 
-class ManageIssuesHandler extends Handler {
-	/** issue associated with the request **/
-	var $issue;
+class ManageIssuesHandler extends Handler
+{
+    /** @var Issue Issue associated with the request */
+    public $issue;
 
-	/**
-	 * Constructor
-	 */
-	function __construct() {
-		parent::__construct();
-		$this->addRoleAssignment(
-			array(ROLE_ID_SUB_EDITOR, ROLE_ID_MANAGER),
-			array(
-				'index', 'issuesTabs'
-			)
-		);
-	}
+    /** @copydoc PKPHandler::_isBackendPage */
+    public $_isBackendPage = true;
 
-	/**
-	 * @copydoc PKPHandler::authorize()
-	 */
-	function authorize($request, &$args, $roleAssignments) {
-		import('lib.pkp.classes.security.authorization.PKPSiteAccessPolicy');
-		$this->addPolicy(new PKPSiteAccessPolicy($request, null, $roleAssignments));
-		return parent::authorize($request, $args, $roleAssignments);
-	}
+    /**
+     * Constructor
+     */
+    public function __construct()
+    {
+        parent::__construct();
+        $this->addRoleAssignment(
+            [Role::ROLE_ID_MANAGER, Role::ROLE_ID_SITE_ADMIN],
+            [
+                'index',
+            ]
+        );
+    }
 
-	/**
-	 * Displays the issue listings in a tabbed interface.
-	 * @param $args array
-	 * @param $request PKPRequest
-	 * @return string Response contents.
-	 */
-	function index($args, $request) {
-		$this->setupTemplate($request);
-		AppLocale::requireComponents(LOCALE_COMPONENT_APP_EDITOR);
+    /**
+     * @copydoc PKPHandler::authorize()
+     */
+    public function authorize($request, &$args, $roleAssignments)
+    {
+        $this->addPolicy(new PKPSiteAccessPolicy($request, null, $roleAssignments));
+        return parent::authorize($request, $args, $roleAssignments);
+    }
 
-		$templateMgr = TemplateManager::getManager($request);
-		return $templateMgr->display('manageIssues/issues.tpl');
-	}
+    /**
+     * Displays the issue listings in a tabbed interface.
+     *
+     * @param array $args
+     * @param PKPRequest $request
+     *
+     * @return string Response contents.
+     */
+    public function index($args, $request)
+    {
+        $this->setupTemplate($request);
 
-	/**
-	 * Returns the issues tabs in the form of a JSON Message.
-	 * @param $args array
-	 * @param $request PKPRequest
-	 * @return JSONMessage JSON object
-	 */
-	function issuesTabs($args, $request) {
-		$this->setupTemplate($request);
-		AppLocale::requireComponents(LOCALE_COMPONENT_APP_EDITOR);
-
-		$templateMgr = TemplateManager::getManager($request);
-
-		return $templateMgr->fetchJson('manageIssues/issuesTabs.tpl');
-	}
+        $templateMgr = TemplateManager::getManager($request);
+        $templateMgr->assign([
+            'pageTitle' => __('editor.navigation.issues')
+        ]);
+        return $templateMgr->display('manageIssues/issues.tpl');
+    }
 }
-
-?>

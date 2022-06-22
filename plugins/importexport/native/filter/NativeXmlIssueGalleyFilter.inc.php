@@ -3,9 +3,9 @@
 /**
  * @file plugins/importexport/native/filter/NativeXmlIssueGalleyFilter.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2000-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2000-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class NativeXmlIssueGalleyFilter
  * @ingroup plugins_importexport_native
@@ -15,99 +15,146 @@
 
 import('lib.pkp.plugins.importexport.native.filter.NativeImportFilter');
 
-class NativeXmlIssueGalleyFilter extends NativeImportFilter {
-	/**
-	 * Constructor
-	 * @param $filterGroup FilterGroup
-	 */
-	function __construct($filterGroup) {
-		$this->setDisplayName('Native XML issue galley import');
-		parent::__construct($filterGroup);
-	}
+use APP\file\IssueFileManager;
+use APP\issue\Issue;
 
-	//
-	// Implement template methods from PersistableFilter
-	//
-	/**
-	 * @copydoc PersistableFilter::getClassName()
-	 */
-	function getClassName() {
-		return 'plugins.importexport.native.filter.NativeXmlIssueGalleyFilter';
-	}
+class NativeXmlIssueGalleyFilter extends NativeImportFilter
+{
+    /**
+     * Constructor
+     *
+     * @param FilterGroup $filterGroup
+     */
+    public function __construct($filterGroup)
+    {
+        $this->setDisplayName('Native XML issue galley import');
+        parent::__construct($filterGroup);
+    }
 
-	//
-	// Override methods in NativeImportFilter
-	//
-	/**
-	 * Return the plural element name
-	 * @return string
-	 */
-	function getPluralElementName() {
-		return 'issue_galleys';
-	}
+    //
+    // Implement template methods from PersistableFilter
+    //
+    /**
+     * @copydoc PersistableFilter::getClassName()
+     */
+    public function getClassName()
+    {
+        return 'plugins.importexport.native.filter.NativeXmlIssueGalleyFilter';
+    }
 
-	/**
-	 * Get the singular element name
-	 * @return string
-	 */
-	function getSingularElementName() {
-		return 'issue_galley';
-	}
+    //
+    // Override methods in NativeImportFilter
+    //
+    /**
+     * Return the plural element name
+     *
+     * @return string
+     */
+    public function getPluralElementName()
+    {
+        return 'issue_galleys';
+    }
 
-	//
-	// Extend functions in the parent class
-	//
-	/**
-	 * Handle a submission element
-	 * @param $node DOMElement
-	 * @return IssueGalley
-	 */
-	function handleElement($node) {
-		$deployment = $this->getDeployment();
-		$context = $deployment->getContext();
-		$issue = $deployment->getIssue();
-		assert(is_a($issue, 'Issue'));
+    /**
+     * Get the singular element name
+     *
+     * @return string
+     */
+    public function getSingularElementName()
+    {
+        return 'issue_galley';
+    }
 
-		// Create the data object
-		$issueGalleyDao  = DAORegistry::getDAO('IssueGalleyDAO');
-		$issueGalley = $issueGalleyDao->newDataObject();
-		$issueGalley->setIssueId($issue->getId());
-		$locale = $node->getAttribute('locale');
-		if (empty($locale)) $locale = $context->getPrimaryLocale();
-		$issueGalley->setLocale($locale);
-		$issueGalley->setSequence($issueGalleyDao->getNextGalleySequence($issue->getId()));
+    //
+    // Extend functions in the parent class
+    //
+    /**
+     * Handle a submission element
+     *
+     * @param DOMElement $node
+     *
+     * @return IssueGalley
+     */
+    public function handleElement($node)
+    {
+        $deployment = $this->getDeployment();
+        $context = $deployment->getContext();
+        $issue = $deployment->getIssue();
+        assert($issue instanceof Issue);
 
-		// Handle metadata in subelements.
-		for ($n = $node->firstChild; $n !== null; $n=$n->nextSibling) if (is_a($n, 'DOMElement')) switch($n->tagName) {
-			case 'label': $issueGalley->setLabel($n->textContent); break;
-			case 'issue_file':
-				$issueFileDao = DAORegistry::getDAO('IssueFileDAO');
-				$issueFile = $issueFileDao->newDataObject();
-				$issueFile->setIssueId($issue->getId());
+        // Create the data object
+        $issueGalleyDao = DAORegistry::getDAO('IssueGalleyDAO'); /** @var IssueGalleyDAO $issueGalleyDao */
+        $issueGalley = $issueGalleyDao->newDataObject();
+        $issueGalley->setIssueId($issue->getId());
+        $locale = $node->getAttribute('locale');
+        if (empty($locale)) {
+            $locale = $context->getPrimaryLocale();
+        }
+        $issueGalley->setLocale($locale);
+        $issueGalley->setSequence($issueGalleyDao->getNextGalleySequence($issue->getId()));
 
-				for ($o = $n->firstChild; $o !== null; $o=$o->nextSibling) if (is_a($o, 'DOMElement')) switch($o->tagName) {
-					case 'file_name': $issueFile->setServerFileName($o->textContent); break;
-					case 'file_type': $issueFile->setFileType($o->textContent); break;
-					case 'file_size': $issueFile->setFileSize($o->textContent); break;
-					case 'content_type': $issueFile->setContentType((int)$o->textContent); break;
-					case 'original_file_name': $issueFile->setOriginalFileName($o->textContent); break;
-					case 'date_uploaded': $issueFile->setDateUploaded($o->textContent); break;
-					case 'date_modified': $issueFile->setDateModified($o->textContent); break;
-					case 'embed':
-						import('classes.file.IssueFileManager');
-						$issueFileManager = new IssueFileManager($issue->getId());
-						$filePath = $issueFileManager->getFilesDir() . $issueFileManager->contentTypeToPath($issueFile->getContentType()) . '/' . $issueFile->getServerFileName();
-						$issueFileManager->writeFile($filePath, base64_decode($o->textContent));
-						break;
-				}
-				$issueFileId = $issueFileDao->insertObject($issueFile);
-				$issueGalley->setFileId($issueFileId);
-				break;
-		}
+        // Handle metadata in subelements.
+        for ($n = $node->firstChild; $n !== null; $n = $n->nextSibling) {
+            if (is_a($n, 'DOMElement')) {
+                switch ($n->tagName) {
+            case 'id':
+                $this->parseIdentifier($n, $issueGalley);
+                break;
+            case 'label': $issueGalley->setLabel($n->textContent); break;
+            case 'issue_file':
+                $issueFileDao = DAORegistry::getDAO('IssueFileDAO'); /** @var IssueFileDAO $issueFileDao */
+                $issueFile = $issueFileDao->newDataObject();
+                $issueFile->setIssueId($issue->getId());
 
-		$issueGalleyDao->insertObject($issueGalley);
-		return $issueGalley;
-	}
+                for ($o = $n->firstChild; $o !== null; $o = $o->nextSibling) {
+                    if (is_a($o, 'DOMElement')) {
+                        switch ($o->tagName) {
+                    case 'file_name': $issueFile->setServerFileName($o->textContent); break;
+                    case 'file_type': $issueFile->setFileType($o->textContent); break;
+                    case 'file_size': $issueFile->setFileSize($o->textContent); break;
+                    case 'content_type': $issueFile->setContentType((int)$o->textContent); break;
+                    case 'original_file_name': $issueFile->setOriginalFileName($o->textContent); break;
+                    case 'date_uploaded': $issueFile->setDateUploaded($o->textContent); break;
+                    case 'date_modified': $issueFile->setDateModified($o->textContent); break;
+                    case 'embed':
+                        $issueFileManager = new IssueFileManager($issue->getId());
+                        $filePath = $issueFileManager->getFilesDir() . $issueFileManager->contentTypeToPath($issueFile->getContentType()) . '/' . $issueFile->getServerFileName();
+                        $issueFileManager->writeFile($filePath, base64_decode($o->textContent));
+                        break;
+                }
+                    }
+                }
+                $issueFileId = $issueFileDao->insertObject($issueFile);
+                $issueGalley->setFileId($issueFileId);
+                break;
+        }
+            }
+        }
+
+        $issueGalleyDao->insertObject($issueGalley);
+        return $issueGalley;
+    }
+
+    /**
+     * Parse an identifier node and set up the galley object accordingly
+     *
+     * @param DOMElement $element
+     * @param Issue $issue
+     */
+    public function parseIdentifier($element, $issue)
+    {
+        $deployment = $this->getDeployment();
+        $advice = $element->getAttribute('advice');
+        switch ($element->getAttribute('type')) {
+            case 'internal':
+                // "update" advice not supported yet.
+                assert(!$advice || $advice == 'ignore');
+                break;
+            case 'public':
+                if ($advice == 'update') {
+                    $issue->setStoredPubId('publisher-id', $element->textContent);
+                }
+                break;
+        }
+    }
 }
-
-?>

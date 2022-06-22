@@ -1,74 +1,195 @@
-# Configure the build matrix
 env:
-  matrix:
-  - TEST=validation
-  - TEST=pgsql
-  - TEST=mysql
   global:
-  - secure: "nxosaZUBRaYhk8+LHaDnVgMIveiK4zewiXW5Fw5TtB/D6V67oASufil1uhcayyzIBwnrZZmrFPLhXm0Lm1RiQHrsftffcMB5JlWK9R9EyWpyd87ewqWy3kXBAvsXXTU6ihGiaFpklhVCKt7XcDSR8bWEb2NVWrM7JS7dHDKMwaA="
+    # Used for saving generated test datasets. See Notion for details.
+    - secure=FTT6C4vhk88L1RKHmUnbTdXdTyjkhoAhtXwYGAvkrrTngU1uJMZeoFeHLqVf/uxQuNssOrEJsQWGrka5OEd1FAAxUuqTmytxRMuz9A6Z4qp5DiMIDyCB9WF5AdY1cb3XQw5GiPc2BWrmBxxRIKporkaND0UBRmyeHDvppjn0uME=
+    - APPLICATION=ojs
+
+dist: bionic
+os: linux
 language: php
-php:
-  - 5.6
-  - 7.1
-# group: deprecated-2017Q1
-dist: trusty
 python:
-  - 3.3
-addons:
-  postgresql: "9.1"
+  - 3.3 # Required by Javascript linter/builder
 git:
-  # We have to init submodules ourselves to make it recursive
+  # Inhibit automatic submodule checkout
   submodules: false
+cache:
+  npm: true
+  directories:
+    - $HOME/.composer/cache
+    - $HOME/.cache
 addons:
-  firefox: "45.9.0esr"
+  chrome: beta
+  postgresql: "9.5"
+  apt:
+    update: true
+    packages:
+      - libgconf-2-4
+
+
 before_install:
-
-  # Start submodules
   - ./tools/startSubmodulesTRAVIS.sh
-
-  # Install composer dependencies
-  - cd lib/pkp && composer update && cd ../..
-
-  # Install node depenencies
-  - . $HOME/.nvm/nvm.sh
-  - nvm install stable
-  - nvm use stable
+  - npm i g -npm
+  - ./lib/pkp/tools/travis/prepare-webserver.sh
+  - ./lib/pkp/tools/travis/install-composer-dependencies.sh
   - npm install && npm run build
 
-  # Configure the webserver
-  - if [[ "$TEST" != "validation" ]]; then ./lib/pkp/tools/travis/prepare-webserver.sh; fi
+stages:
+  - validate
+  - test
+  - upgrade
 
-  # Start xvfb
-  - if [[ "$TEST" != "validation" ]]; then ./lib/pkp/tools/travis/start-xvfb.sh; fi
+jobs:
+  include:
+    - stage: test
+      env: TEST=pgsql SAVE_BUILD=true
+      php: 8.0
+    - env: TEST=pgsql
+      php: 8.1.0
+    - env: TEST=mysql SAVE_BUILD=true
+      php: 8.0
+    - env: TEST=mysql
+      php: 8.1.0
+    # Path info disabled DISABLED pending a fix of pkp/pkp-lib#4414
+    # - PHPVERSION=7.4 TEST=mysql DISABLE_PATH_INFO=1
+    #   php: 7.2
 
-  # Start Selenium
-  - if [[ "$TEST" != "validation" ]]; then ./lib/pkp/tools/travis/start-selenium.sh; fi
+    - stage: validate
+      name: "Validate and lint"
+      script:
+      - |
+        npm install
+        ./lib/pkp/tools/travis/install-linter.sh
+        ./lib/pkp/tools/travis/validate-xml.sh
+        ./lib/pkp/tools/buildjs.sh -n
+        ./lib/pkp/tools/checkHelp.sh
+        ./lib/pkp/tools/travis/validate-json.sh
+        npm run lint
 
-  # Prepare code coverage
-  - if [[ "$TEST" == "mysql" ]]; then ./lib/pkp/tools/travis/prepare-code-coverage.sh; fi
+    - stage: upgrade
+      env: DATASET_BRANCH=stable-3_3_0 TEST=mysql
+      php: 8.0
+      script:
+        - source ./lib/pkp/tools/travis/prepare-tests.sh
+        - git clone https://github.com/pkp/datasets
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/files/* files/
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/public/* public/
+        - cp datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/config.inc.php .
+        - patch -p1 < datasets/upgrade/3_4_0-add-email-config.diff
+        - ./datasets/tools/dbclient.sh < datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/database.sql
+        - php tools/upgrade.php check
+        - php tools/upgrade.php upgrade
 
-  # Install the JS linter
-  - if [[ "$TEST" == "validation" ]]; then ./lib/pkp/tools/travis/install-linter.sh; fi
+    - env: DATASET_BRANCH=stable-3_2_1 TEST=mysql
+      php: 8.0
+      script:
+        - source ./lib/pkp/tools/travis/prepare-tests.sh
+        - git clone https://github.com/pkp/datasets
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/files/* files/
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/public/* public/
+        - cp datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/config.inc.php .
+        - patch -p1 < datasets/upgrade/3_4_0-add-email-config.diff
+        - ./datasets/tools/dbclient.sh < datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/database.sql
+        - php tools/upgrade.php check
+        - php tools/upgrade.php upgrade
 
-  # Sleep and output our logs, to avoid hanging build with no access to
-  # logs. This is useful for debugging but too verbose to leave enabled.
-  # - (sleep 590; cat access.log; cat error.log; cat xvfb-output; cat selenium-output; cat ./lib/pkp/tests/results/error.log) &
+    - env: DATASET_BRANCH=stable-3_2_0 TEST=mysql
+      php: 8.0
+      script:
+        - source ./lib/pkp/tools/travis/prepare-tests.sh
+        - git clone https://github.com/pkp/datasets
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/files/* files/
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/public/* public/
+        - cp datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/config.inc.php .
+        - patch -p1 < datasets/upgrade/3_4_0-add-email-config.diff
+        - ./datasets/tools/dbclient.sh < datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/database.sql
+        - php tools/upgrade.php check
+        - php tools/upgrade.php upgrade
+
+    - env: DATASET_BRANCH=3.1.1-2 TEST=mysql
+      php: 8.0
+      script:
+        - source ./lib/pkp/tools/travis/prepare-tests.sh
+        - git clone https://github.com/pkp/datasets
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/files/* files/
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/public/* public/
+        - cp datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/config.inc.php .
+        - patch -p1 < datasets/upgrade/3_4_0-add-email-config.diff
+        - ./datasets/tools/dbclient.sh < datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/database.sql
+        - php tools/upgrade.php check
+        - php tools/upgrade.php upgrade
+
+    - env: DATASET_BRANCH=3.1.0 TEST=mysql
+      php: 8.0
+      script:
+        - source ./lib/pkp/tools/travis/prepare-tests.sh
+        - git clone https://github.com/pkp/datasets
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/files/* files/
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/public/* public/
+        - cp datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/config.inc.php .
+        - patch -p1 < datasets/upgrade/3_4_0-add-email-config.diff
+        - ./datasets/tools/dbclient.sh < datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/database.sql
+        - php tools/upgrade.php check
+        - php tools/upgrade.php upgrade
+
+    - env: DATASET_BRANCH=stable-3_3_0 TEST=pgsql
+      php: 8.0
+      script:
+        - source ./lib/pkp/tools/travis/prepare-tests.sh
+        - git clone https://github.com/pkp/datasets
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/files/* files/
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/public/* public/
+        - cp datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/config.inc.php .
+        - patch -p1 < datasets/upgrade/3_4_0-add-email-config.diff
+        - ./datasets/tools/dbclient.sh --quiet < datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/database.sql
+        - php tools/upgrade.php check
+        - php tools/upgrade.php upgrade
+
+    - env: DATASET_BRANCH=stable-3_2_1 TEST=pgsql
+      php: 8.0
+      script:
+        - source ./lib/pkp/tools/travis/prepare-tests.sh
+        - git clone https://github.com/pkp/datasets
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/files/* files/
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/public/* public/
+        - cp datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/config.inc.php .
+        - patch -p1 < datasets/upgrade/3_4_0-add-email-config.diff
+        - ./datasets/tools/dbclient.sh --quiet < datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/database.sql
+        - php tools/upgrade.php check
+        - php tools/upgrade.php upgrade
+
+    - env: DATASET_BRANCH=stable-3_2_0 TEST=pgsql
+      php: 8.0
+      script:
+        - source ./lib/pkp/tools/travis/prepare-tests.sh
+        - git clone https://github.com/pkp/datasets
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/files/* files/
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/public/* public/
+        - cp datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/config.inc.php .
+        - patch -p1 < datasets/upgrade/3_4_0-add-email-config.diff
+        - ./datasets/tools/dbclient.sh --quiet < datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/database.sql
+        - php tools/upgrade.php check
+        - php tools/upgrade.php upgrade
+
+    - env: DATASET_BRANCH=3.1.0 TEST=pgsql
+      php: 8.0
+      script:
+        - source ./lib/pkp/tools/travis/prepare-tests.sh
+        - git clone https://github.com/pkp/datasets
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/files/* files/
+        - cp -r datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/public/* public/
+        - cp datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/config.inc.php .
+        - patch -p1 < datasets/upgrade/3_4_0-add-email-config.diff
+        - ./datasets/tools/dbclient.sh --quiet < datasets/${APPLICATION}/${DATASET_BRANCH}/${TEST}/database.sql
+        - php tools/upgrade.php check
+        - php tools/upgrade.php upgrade
 
 script:
-  - if [[ "$TEST" != "validation" ]]; then ./lib/pkp/tools/travis/run-tests.sh; fi
-  - if [[ "$TEST" == "validation" ]]; then ./lib/pkp/tools/travis/validate-xml.sh && ./lib/pkp/tools/buildjs.sh -n; fi
+  - source ./lib/pkp/tools/travis/prepare-tests.sh
+  - ./lib/pkp/tools/travis/run-tests.sh
+
+after_failure:
+  - sudo apt-get install sharutils
+  - tar cz cypress/screenshots | uuencode /dev/stdout
 
 after_script:
-  # Merge the coverage reports into one HTML report and upload to http://pkp.sfu.ca/test-coverage
-  - if [[ "$TEST" == "mysql" ]]; then ./lib/pkp/tools/travis/post-code-coverage.sh; fi
-
-  # Upload the completed database to the PKP server for other uses
-  - if [[ "$TEST" != "validation" ]]; then ./lib/pkp/tools/travis/post-data-build.sh; fi
-
-  # Print logs and outputs for debugging.
-  # - cat access.log
-  - tail -c 1048576 error.log
-  # - cat xvfb-output
-  # - cat selenium-output
-  - cat ./lib/pkp/tests/results/error.log
-  - for f in lib/pkp/tests/results/*.png; do echo ============== START ${f} ================== ; cat $f | base64 ; echo ============== END ${f} ================== ; done
+  - tail -n 200 error.log

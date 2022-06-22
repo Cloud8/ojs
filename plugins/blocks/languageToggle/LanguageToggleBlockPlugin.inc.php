@@ -3,9 +3,9 @@
 /**
  * @file plugins/blocks/languageToggle/LanguageToggleBlockPlugin.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class LanguageToggleBlockPlugin
  * @ingroup plugins_blocks_languageToggle
@@ -13,103 +13,78 @@
  * @brief Class for language selector block plugin
  */
 
-import('lib.pkp.classes.plugins.BlockPlugin');
+use PKP\facades\Locale;
+use PKP\i18n\LocaleMetadata;
+use PKP\plugins\BlockPlugin;
+use PKP\session\SessionManager;
 
-class LanguageToggleBlockPlugin extends BlockPlugin {
-	/**
-	 * Determine whether the plugin is enabled. Overrides parent so that
-	 * the plugin will be displayed during install.
-	 *
-	 * @param $contextId int Context ID (journal/press)
-	 * @return boolean
-	 */
-	function getEnabled($contextId = null) {
-		if (!Config::getVar('general', 'installed')) return true;
-		return parent::getEnabled($contextId);
-	}
+class LanguageToggleBlockPlugin extends BlockPlugin
+{
+    /**
+     * Install default settings on system install.
+     *
+     * @return string
+     */
+    public function getInstallSitePluginSettingsFile()
+    {
+        return $this->getPluginPath() . '/settings.xml';
+    }
 
-	/**
-	 * Install default settings on system install.
-	 * @return string
-	 */
-	function getInstallSitePluginSettingsFile() {
-		return $this->getPluginPath() . '/settings.xml';
-	}
+    /**
+     * Install default settings on journal creation.
+     *
+     * @return string
+     */
+    public function getContextSpecificPluginSettingsFile()
+    {
+        return $this->getPluginPath() . '/settings.xml';
+    }
 
-	/**
-	 * Install default settings on journal creation.
-	 * @return string
-	 */
-	function getContextSpecificPluginSettingsFile() {
-		return $this->getPluginPath() . '/settings.xml';
-	}
+    /**
+     * Get the display name of this plugin.
+     *
+     * @return string
+     */
+    public function getDisplayName()
+    {
+        return __('plugins.block.languageToggle.displayName');
+    }
 
-	/**
-	 * Get the block context. Overrides parent so that the plugin will be
-	 * displayed during install.
-	 *
-	 * @param $contextId int Context ID (journal/press)
-	 * @return int
-	 */
-	function getBlockContext($contextId = null) {
-		if (!Config::getVar('general', 'installed')) return BLOCK_CONTEXT_SIDEBAR;
-		return parent::getBlockContext($contextId);
-	}
+    /**
+     * Get a description of the plugin.
+     */
+    public function getDescription()
+    {
+        return __('plugins.block.languageToggle.description');
+    }
 
-	/**
-	 * Determine the plugin sequence. Overrides parent so that
-	 * the plugin will be displayed during install.
-	 *
-	 * @param $contextId int Context ID (journal/press)
-	 */
-	function getSeq($contextId = null) {
-		if (!Config::getVar('general', 'installed')) return 2;
-		return parent::getSeq($contextId);
-	}
+    /**
+     * Get the HTML contents for this block.
+     *
+     * @param object $templateMgr
+     * @param PKPRequest $request
+     */
+    public function getContents($templateMgr, $request = null)
+    {
+        $templateMgr->assign('isPostRequest', $request->isPost());
+        if (!SessionManager::isDisabled()) {
+            $journal = $request->getJournal();
+            if (isset($journal)) {
+                $locales = $journal->getSupportedLocaleNames();
+            } else {
+                $site = $request->getSite();
+                $locales = $site->getSupportedLocaleNames();
+            }
+        } else {
+            $locales = array_map(fn (LocaleMetadata $locale) => $locale->getDisplayName(), Locale::getLocales());
+            $templateMgr->assign('languageToggleNoUser', true);
+        }
 
-	/**
-	 * Get the display name of this plugin.
-	 * @return String
-	 */
-	function getDisplayName() {
-		return __('plugins.block.languageToggle.displayName');
-	}
+        if (!empty($locales)) {
+            $templateMgr->assign('enableLanguageToggle', true);
+            $templateMgr->assign('languageToggleLocales', $locales);
+        }
 
-	/**
-	 * Get a description of the plugin.
-	 */
-	function getDescription() {
-		return __('plugins.block.languageToggle.description');
-	}
-
-	/**
-	 * Get the HTML contents for this block.
-	 * @param $templateMgr object
-	 * @param $request PKPRequest
-	 */
-	function getContents($templateMgr, $request = null) {
-		$templateMgr->assign('isPostRequest', $request->isPost());
-		if (!defined('SESSION_DISABLE_INIT')) {
-			$journal = $request->getJournal();
-			if (isset($journal)) {
-				$locales = $journal->getSupportedLocaleNames();
-
-			} else {
-				$site = $request->getSite();
-				$locales = $site->getSupportedLocaleNames();
-			}
-		} else {
-			$locales = AppLocale::getAllLocales();
-			$templateMgr->assign('languageToggleNoUser', true);
-		}
-
-		if (isset($locales) && count($locales) > 1) {
-			$templateMgr->assign('enableLanguageToggle', true);
-			$templateMgr->assign('languageToggleLocales', $locales);
-		}
-
-		return parent::getContents($templateMgr, $request);
-	}
+        return parent::getContents($templateMgr, $request);
+    }
 }
-
-?>

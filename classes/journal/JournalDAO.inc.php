@@ -3,211 +3,160 @@
 /**
  * @file classes/journal/JournalDAO.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class JournalDAO
  * @ingroup journal
+ *
  * @see Journal
  *
  * @brief Operations for retrieving and modifying Journal objects.
  */
 
-import('lib.pkp.classes.context.ContextDAO');
-import('classes.journal.Journal');
-import('lib.pkp.classes.metadata.MetadataTypeDescription');
+namespace APP\journal;
 
-define('JOURNAL_FIELD_TITLE', 1);
-define('JOURNAL_FIELD_SEQUENCE', 2);
+use APP\core\Application;
+use APP\facades\Repo;
+use PKP\context\ContextDAO;
+use PKP\db\DAORegistry;
+use PKP\metadata\MetadataTypeDescription;
 
-class JournalDAO extends ContextDAO {
+class JournalDAO extends ContextDAO
+{
+    /** @copydoc SchemaDAO::$schemaName */
+    public $schemaName = 'context';
 
-	/**
-	 * Construct a new Journal.
-	 * @return DataObject
-	 */
-	function newDataObject() {
-		return new Journal();
-	}
+    /** @copydoc SchemaDAO::$tableName */
+    public $tableName = 'journals';
 
-	/**
-	 * Internal function to return a Journal object from a row.
-	 * @param $row array
-	 * @return Journal
-	 */
-	function _fromRow($row) {
-		$journal = parent::_fromRow($row);
-		$journal->setPrimaryLocale($row['primary_locale']);
-		$journal->setEnabled($row['enabled']);
-		HookRegistry::call('JournalDAO::_returnJournalFromRow', array(&$journal, &$row));
-		return $journal;
-	}
+    /** @copydoc SchemaDAO::$settingsTableName */
+    public $settingsTableName = 'journal_settings';
 
-	/**
-	 * Update an existing journal.
-	 * @param $journal Journal
-	 */
-	function updateObject($journal) {
-		return $this->update(
-			'UPDATE journals
-			SET	path = ?,
-				seq = ?,
-				enabled = ?,
-				primary_locale = ?
-			WHERE journal_id = ?',
-			array(
-				$journal->getPath(),
-				(float) $journal->getSequence(),
-				$journal->getEnabled() ? 1 : 0,
-				$journal->getPrimaryLocale(),
-				(int) $journal->getId()
-			)
-		);
-	}
+    /** @copydoc SchemaDAO::$primaryKeyColumn */
+    public $primaryKeyColumn = 'journal_id';
 
-	/**
-	 * Delete a journal by ID, INCLUDING ALL DEPENDENT ITEMS.
-	 * @param $journalId int
-	 */
-	function deleteById($journalId) {
-		$journalSettingsDao = DAORegistry::getDAO('JournalSettingsDAO');
-		$journalSettingsDao->deleteById($journalId);
+    /** @var array Maps schema properties for the primary table to their column names */
+    public $primaryTableColumns = [
+        'id' => 'journal_id',
+        'urlPath' => 'path',
+        'enabled' => 'enabled',
+        'seq' => 'seq',
+        'primaryLocale' => 'primary_locale',
+        'currentIssueId' => 'current_issue_id'
+    ];
 
-		$sectionDao = DAORegistry::getDAO('SectionDAO');
-		$sectionDao->deleteByJournalId($journalId);
+    /**
+     * Create a new DataObject of the appropriate class
+     *
+     * @return \PKP\core\DataObject
+     */
+    public function newDataObject()
+    {
+        return new Journal();
+    }
 
-		$issueDao = DAORegistry::getDAO('IssueDAO');
-		$issueDao->deleteByJournalId($journalId);
+    /**
+     * Retrieve the IDs and titles of all journals in an associative array.
+     *
+     * @return array
+     */
+    public function getTitles($enabledOnly = false)
+    {
+        $journals = [];
+        $journalIterator = $this->getAll($enabledOnly);
+        while ($journal = $journalIterator->next()) {
+            $journals[$journal->getId()] = $journal->getLocalizedName();
+        }
+        return $journals;
+    }
 
-		$emailTemplateDao = DAORegistry::getDAO('EmailTemplateDAO');
-		$emailTemplateDao->deleteEmailTemplatesByContext($journalId);
+    /**
+     * Delete the public IDs of all publishing objects in a journal.
+     *
+     * @param int $journalId
+     * @param string $pubIdType One of the NLM pub-id-type values or
+     * 'other::something' if not part of the official NLM list
+     * (see <http://dtd.nlm.nih.gov/publishing/tag-library/n-4zh0.html>).
+     */
+    public function deleteAllPubIds($journalId, $pubIdType)
+    {
+        Repo::galley()->dao->deleteAllPubIds($journalId, $pubIdType);
+        Repo::submissionFile()->dao->deleteAllPubIds($journalId, $pubIdType);
+        Repo::issue()->dao->deleteAllPubIds($journalId, $pubIdType);
+        Repo::publication()->dao->deleteAllPubIds($journalId, $pubIdType);
+    }
 
-		$subscriptionDao = DAORegistry::getDAO('IndividualSubscriptionDAO');
-		$subscriptionDao->deleteByJournalId($journalId);
-		$subscriptionDao = DAORegistry::getDAO('InstitutionalSubscriptionDAO');
-		$subscriptionDao->deleteByJournalId($journalId);
+    /**
+     * Check whether the given public ID exists for any publishing
+     * object in a journal.
+     *
+     * @param int $journalId
+     * @param string $pubIdType One of the NLM pub-id-type values or
+     * 'other::something' if not part of the official NLM list
+     * (see <http://dtd.nlm.nih.gov/publishing/tag-library/n-4zh0.html>).
+     * @param string $pubId
+     * @param int $assocType The object type of an object to be excluded from
+     *  the search. Identified by one of the ASSOC_TYPE_* constants.
+     * @param int $assocId The id of an object to be excluded from the search.
+     * @param bool $forSameType Whether only the same objects should be considered.
+     *
+     * @return bool
+     */
+    public function anyPubIdExists(
+        $journalId,
+        $pubIdType,
+        $pubId,
+        $assocType = MetadataTypeDescription::ASSOC_TYPE_ANY,
+        $assocId = 0,
+        $forSameType = false
+    ) {
+        $pubObjectDaos = [
+            ASSOC_TYPE_ISSUE => Repo::issue()->dao,
+            ASSOC_TYPE_PUBLICATION => Repo::publication()->dao,
+            ASSOC_TYPE_GALLEY => Application::getRepresentationDAO(),
+            ASSOC_TYPE_ISSUE_GALLEY => DAORegistry::getDAO('IssueGalleyDAO'),
+            ASSOC_TYPE_SUBMISSION_FILE => Repo::submissionFile()->dao,
+        ];
+        if ($forSameType) {
+            $dao = $pubObjectDaos[$assocType];
+            $excludedId = $assocId;
+            if ($dao->pubIdExists($pubIdType, $pubId, $excludedId, $journalId)) {
+                return true;
+            }
+            return false;
+        }
+        foreach ($pubObjectDaos as $daoAssocType => $dao) {
+            if ($assocType == $daoAssocType) {
+                $excludedId = $assocId;
+            } else {
+                $excludedId = 0;
+            }
+            if ($dao->pubIdExists($pubIdType, $pubId, $excludedId, $journalId)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-		$subscriptionTypeDao = DAORegistry::getDAO('SubscriptionTypeDAO');
-		$subscriptionTypeDao->deleteSubscriptionTypesByJournal($journalId);
-
-		$announcementDao = DAORegistry::getDAO('AnnouncementDAO');
-		$announcementDao->deleteByAssoc(ASSOC_TYPE_JOURNAL, $journalId);
-
-		$announcementTypeDao = DAORegistry::getDAO('AnnouncementTypeDAO');
-		$announcementTypeDao->deleteByAssoc(ASSOC_TYPE_JOURNAL, $journalId);
-
-		$articleDao = DAORegistry::getDAO('ArticleDAO');
-		$articleDao->deleteByContextId($journalId);
-
-		$pluginSettingsDao = DAORegistry::getDAO('PluginSettingsDAO');
-		$pluginSettingsDao->deleteByContextId($journalId);
-
-		$reviewFormDao = DAORegistry::getDAO('ReviewFormDAO');
-		$reviewFormDao->deleteByAssoc(ASSOC_TYPE_JOURNAL, $journalId);
-
-		parent::deleteById($journalId);
-	}
-
-	/**
-	 * Retrieve the IDs and titles of all journals in an associative array.
-	 * @return array
-	 */
-	function getTitles($enabledOnly = false) {
-		$journals = array();
-		$journalIterator = $this->getAll($enabledOnly);
-		while ($journal = $journalIterator->next()) {
-			$journals[$journal->getId()] = $journal->getLocalizedName();
-		}
-		return $journals;
-	}
-
-	/**
-	 * Delete the public IDs of all publishing objects in a journal.
-	 * @param $journalId int
-	 * @param $pubIdType string One of the NLM pub-id-type values or
-	 * 'other::something' if not part of the official NLM list
-	 * (see <http://dtd.nlm.nih.gov/publishing/tag-library/n-4zh0.html>).
-	 */
-	function deleteAllPubIds($journalId, $pubIdType) {
-		$pubObjectDaos = array('IssueDAO', 'ArticleDAO', 'ArticleGalleyDAO');
-		foreach($pubObjectDaos as $daoName) {
-			$dao = DAORegistry::getDAO($daoName);
-			$dao->deleteAllPubIds($journalId, $pubIdType);
-		}
-		import('lib.pkp.classes.submission.SubmissionFileDAODelegate');
-		$submissionFileDaoDelegate = new SubmissionFileDAODelegate();
-		$submissionFileDaoDelegate->deleteAllPubIds($journalId, $pubIdType);
-
-	}
-
-	/**
-	 * Check whether the given public ID exists for any publishing
-	 * object in a journal.
-	 * @param $journalId int
-	 * @param $pubIdType string One of the NLM pub-id-type values or
-	 * 'other::something' if not part of the official NLM list
-	 * (see <http://dtd.nlm.nih.gov/publishing/tag-library/n-4zh0.html>).
-	 * @param $pubId string
-	 * @param $assocType int The object type of an object to be excluded from
-	 *  the search. Identified by one of the ASSOC_TYPE_* constants.
-	 * @param $assocId int The id of an object to be excluded from the search.
-	 * @param $forSameType boolean Whether only the same objects should be considered.
-	 * @return boolean
-	 */
-	function anyPubIdExists($journalId, $pubIdType, $pubId,
-			$assocType = ASSOC_TYPE_ANY, $assocId = 0, $forSameType = false) {
-
-		$pubObjectDaos = array(
-			ASSOC_TYPE_ISSUE => DAORegistry::getDAO('IssueDAO'),
-			ASSOC_TYPE_ARTICLE => Application::getSubmissionDAO(),
-			ASSOC_TYPE_GALLEY => Application::getRepresentationDAO(),
-			ASSOC_TYPE_ISSUE_GALLEY => DAORegistry::getDAO('IssueGalleyDAO'),
-			ASSOC_TYPE_SUBMISSION_FILE => DAORegistry::getDAO('SubmissionFileDAO')
-		);
-		if ($forSameType) {
-			$dao = $pubObjectDaos[$assocType];
-			$excludedId = $assocId;
-			if ($dao->pubIdExists($pubIdType, $pubId, $excludedId, $journalId)) return true;
-			return false;
-		}
-		foreach($pubObjectDaos as $daoAssocType => $dao) {
-			if ($assocType == $daoAssocType) {
-				$excludedId = $assocId;
-			} else {
-				$excludedId = 0;
-			}
-			if ($dao->pubIdExists($pubIdType, $pubId, $excludedId, $journalId)) return true;
-		}
-		return false;
-	}
-
-	//
-	// Protected methods
-	//
-	/**
-	 * Get the table name for this context.
-	 * @return string
-	 */
-	protected function _getTableName() {
-		return 'journals';
-	}
-
-	/**
-	 * Get the table name for this context's settings table.
-	 * @return string
-	 */
-	protected function _getSettingsTableName() {
-		return 'journal_settings';
-	}
-
-	/**
-	 * Get the name of the primary key column for this context.
-	 * @return string
-	 */
-	protected function _getPrimaryKeyColumn() {
-		return 'journal_id';
-	}
+    /**
+     * Sets current_issue_id for context to null.
+     * This is necessary because current_issue_id should explicitly be set to null rather than unset.
+     *
+     * @param int $contextId
+     *
+     * @return int
+     */
+    public function removeCurrentIssue($contextId)
+    {
+        return $this->update(
+            "UPDATE {$this->tableName} SET current_issue_id = null WHERE {$this->primaryKeyColumn} = ?",
+            [(int) $contextId]
+        );
+    }
 }
 
-?>
+if (!PKP_STRICT_MODE) {
+    class_alias('\APP\journal\JournalDAO', '\JournalDAO');
+}

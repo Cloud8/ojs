@@ -1,12 +1,14 @@
 <?php
 
+use APP\core\Application;
+
 /**
  * @mainpage OJS API Reference
  *
  * Welcome to the OJS API Reference. This resource contains documentation
  * generated automatically from the OJS source code.
  *
- * The design of Open %Journal Systems 2.x is heavily structured for
+ * The design of Open %Journal Systems is heavily structured for
  * maintainability, flexibility and robustness. Those familiar with Sun's
  * Enterprise Java Beans technology or the Model-View-Controller (MVC) pattern
  * will note similarities.
@@ -44,15 +46,15 @@
  *
  * To learn more about developing OJS, there are several additional resources
  * that may be useful:
- * - The docs/README document
- * - The PKP support forum at http://forum.pkp.sfu.ca
- * - Documentation available at http://pkp.sfu.ca/ojs_documentation
+ * - The docs/README.md document
+ * - The PKP support forum at https://forum.pkp.sfu.ca/
+ * - Documentation available at https://docs.pkp.sfu.ca/dev/
  *
  * @file ojs/index.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @ingroup index
  *
@@ -62,9 +64,7 @@
 
 // Initialize global environment
 define('INDEX_FILE_LOCATION', __FILE__);
-$application = require('./lib/pkp/includes/bootstrap.inc.php');
+require_once './lib/pkp/includes/bootstrap.inc.php';
 
 // Serve the request
-$application->execute();
-
-?>
+Application::get()->execute();

@@ -3,9 +3,9 @@
 /**
  * @file controllers/grid/articleGalleys/ArticleGalleyGridCellProvider.inc.php
  *
- * Copyright (c) 2016-2017 Simon Fraser University
- * Copyright (c) 2000-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2016-2021 Simon Fraser University
+ * Copyright (c) 2000-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class ArticleGalleyGridCellProvider
  * @ingroup controllers_grid_articleGalleys
@@ -13,76 +13,88 @@
  * @brief Base class for a cell provider for article galleys.
  */
 
-import('lib.pkp.classes.controllers.grid.DataObjectGridCellProvider');
+use APP\facades\Repo;
+use PKP\controllers\grid\DataObjectGridCellProvider;
+use PKP\controllers\grid\GridHandler;
 
-class ArticleGalleyGridCellProvider extends DataObjectGridCellProvider {
+class ArticleGalleyGridCellProvider extends DataObjectGridCellProvider
+{
+    /** @var Submission */
+    public $_submission;
 
-	/** @var Submission **/
-	var $_submission;
+    /** @var Publication */
+    public $_publication;
 
-	/**
-	 * Constructor
-	 * @param $submission Submission
-	 */
-	function __construct($submission) {
-		parent::__construct();
-		$this->_submission = $submission;
-	}
+    public $_isEditable;
 
-	//
-	// Template methods from GridCellProvider
-	//
-	/**
-	 * @copydoc GridCellProvider::getTemplateVarsFromRowColumn()
-	 */
-	function getTemplateVarsFromRowColumn($row, $column) {
-		$element = $row->getData();
-		$columnId = $column->getId();
-		assert(is_a($element, 'DataObject') && !empty($columnId));
+    /**
+     * Constructor
+     *
+     * @param Submission $submission
+     */
+    public function __construct($submission, $publication, $isEditable)
+    {
+        parent::__construct();
+        $this->_submission = $submission;
+        $this->_publication = $publication;
+        $this->_isEditable = $isEditable;
+    }
 
-		switch ($columnId) {
-			case 'label':
-				return array(
-					'label' => ($element->getRemoteUrl()=='' && $element->getFileId())?'':$element->getLabel()
-				);
-				break;
-			default: assert(false);
-		}
-		return parent::getTemplateVarsFromRowColumn($row, $column);
-	}
+    //
+    // Template methods from GridCellProvider
+    //
+    /**
+     * @copydoc GridCellProvider::getTemplateVarsFromRowColumn()
+     */
+    public function getTemplateVarsFromRowColumn($row, $column)
+    {
+        $element = $row->getData();
+        $columnId = $column->getId();
+        assert($element instanceof \PKP\core\DataObject && !empty($columnId));
 
-	/**
-	 * Get request arguments.
-	 * @param $row GridRow
-	 * @return array
-	 */
-	function getRequestArgs($row) {
-		return array(
-			'submissionId' => $this->_submission->getId(),
-		);
-	}
+        switch ($columnId) {
+            case 'label':
+                return [
+                    'label' => ($element->getRemoteUrl() == '' && $element->getData('submissionFileId')) ? '' : $element->getLabel()
+                ];
+                break;
+            default: assert(false);
+        }
+        return parent::getTemplateVarsFromRowColumn($row, $column);
+    }
 
-	/**
-	 * @copydoc GridCellProvider::getCellActions()
-	 */
-	function getCellActions($request, $row, $column) {
-		switch ($column->getId()) {
-			case 'label':
-				$element = $row->getData();
-				if ($element->getRemoteUrl() != '' || !$element->getFileId()) break;
+    /**
+     * Get request arguments.
+     *
+     * @param \PKP\controllers\grid\GridRow $row
+     *
+     * @return array
+     */
+    public function getRequestArgs($row)
+    {
+        return [
+            'submissionId' => $this->_submission->getId(),
+            'publicationId' => $this->_publication->getId(),
+        ];
+    }
 
-				$submissionFileDao = DAORegistry::getDAO('SubmissionFileDAO');
-				import('lib.pkp.classes.submission.SubmissionFile');
-				$submissionFile = $submissionFileDao->getLatestRevision(
-					$element->getFileId(),
-					null,
-					$element->getSubmissionId()
-				);
-				import('lib.pkp.controllers.api.file.linkAction.DownloadFileLinkAction');
-				return array(new DownloadFileLinkAction($request, $submissionFile, $request->getUserVar('stageId'), $element->getLabel()));
-		}
-		return parent::getCellActions($request, $row, $column);
-	}
+    /**
+     * @copydoc GridCellProvider::getCellActions()
+     */
+    public function getCellActions($request, $row, $column, $position = GridHandler::GRID_ACTION_POSITION_DEFAULT)
+    {
+        switch ($column->getId()) {
+            case 'label':
+                $element = $row->getData();
+                if ($element->getRemoteUrl() != '' || !$element->getData('submissionFileId')) {
+                    break;
+                }
+
+                $submissionFile = Repo::submissionFile()
+                    ->get($element->getData('submissionFileId'));
+                import('lib.pkp.controllers.api.file.linkAction.DownloadFileLinkAction');
+                return [new DownloadFileLinkAction($request, $submissionFile, WORKFLOW_STAGE_ID_PRODUCTION, $element->getLabel())];
+        }
+        return parent::getCellActions($request, $row, $column, $position);
+    }
 }
-
-?>

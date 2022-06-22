@@ -3,9 +3,9 @@
 /**
  * @file classes/submission/form/SubmissionSubmitStep1Form.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class SubmissionSubmitStep1Form
  * @ingroup submission_form
@@ -13,83 +13,149 @@
  * @brief Form for Step 1 of author submission.
  */
 
-import('lib.pkp.classes.submission.form.PKPSubmissionSubmitStep1Form');
+namespace APP\submission\form;
 
-class SubmissionSubmitStep1Form extends PKPSubmissionSubmitStep1Form {
-	/**
-	 * Constructor.
-	 */
-	function __construct($context, $submission = null) {
-		parent::__construct($context, $submission);
-		$this->addCheck(new FormValidatorCustom($this, 'sectionId', 'required', 'author.submit.form.sectionRequired', array(DAORegistry::getDAO('SectionDAO'), 'sectionExists'), array($context->getId())));
-	}
+use APP\core\Application;
+use APP\template\TemplateManager;
+use PKP\core\PKPString;
+use PKP\db\DAORegistry;
 
-	/**
-	 * Fetch the form.
-	 */
-	function fetch($request) {
-		$roleDao = DAORegistry::getDAO('RoleDAO');
-		$user = $request->getUser();
-		$canSubmitAll = $roleDao->userHasRole($this->context->getId(), $user->getId(), ROLE_ID_MANAGER) ||
-			$roleDao->userHasRole($this->context->getId(), $user->getId(), ROLE_ID_SUB_EDITOR);
+use PKP\security\Role;
+use PKP\submission\form\PKPSubmissionSubmitStep1Form;
 
-		// Get section options for this context
-		$sectionDao = DAORegistry::getDAO('SectionDAO');
-		$sectionOptions = array('0' => '') + $sectionDao->getTitles($this->context->getId(), !$canSubmitAll);
-		$templateMgr = TemplateManager::getManager($request);
-		$templateMgr->assign('sectionOptions', $sectionOptions);
+class SubmissionSubmitStep1Form extends PKPSubmissionSubmitStep1Form
+{
+    /**
+     * Constructor.
+     *
+     * @param null|mixed $submission
+     */
+    public function __construct($context, $submission = null)
+    {
+        parent::__construct($context, $submission);
+        $this->addCheck(new \PKP\form\validation\FormValidatorCustom($this, 'sectionId', 'required', 'author.submit.form.sectionRequired', [DAORegistry::getDAO('SectionDAO'), 'sectionExists'], [$context->getId()]));
+    }
 
-		return parent::fetch($request);
-	}
+    /**
+     * @copydoc SubmissionSubmitForm::fetch
+     *
+     * @param null|mixed $template
+     */
+    public function fetch($request, $template = null, $display = false)
+    {
+        $roleDao = DAORegistry::getDAO('RoleDAO'); /** @var RoleDAO $roleDao */
+        $user = $request->getUser();
+        $canSubmitAll = $roleDao->userHasRole($this->context->getId(), $user->getId(), Role::ROLE_ID_MANAGER) ||
+            $roleDao->userHasRole($this->context->getId(), $user->getId(), Role::ROLE_ID_SUB_EDITOR) ||
+            $roleDao->userHasRole(Application::CONTEXT_SITE, $user->getId(), Role::ROLE_ID_SITE_ADMIN);
 
-	/**
-	 * Initialize form data from current submission.
-	 */
-	function initData() {
-		if (isset($this->submission)) {
-			parent::initData(array(
-				'sectionId' => $this->submission->getSectionId(),
-			));
-		} else {
-			parent::initData();
-		}
-	}
+        // Get section options for this context
+        $sectionDao = DAORegistry::getDAO('SectionDAO'); /** @var SectionDAO $sectionDao */
+        $sections = [];
+        $sectionsIterator = $sectionDao->getByContextId($this->context->getId(), null, !$canSubmitAll);
+        while ($section = $sectionsIterator->next()) {
+            if (!$section->getIsInactive()) {
+                $sections[$section->getId()] = $section->getLocalizedTitle();
+            }
+        }
+        $sectionOptions = ['0' => ''] + $sections;
 
-	/**
-	 * Assign form data to user-submitted data.
-	 */
-	function readInputData() {
-		$this->readUserVars(array(
-			'sectionId',
-		));
-		parent::readInputData();
-	}
+        $templateMgr = TemplateManager::getManager($request);
+        $templateMgr->assign('sectionOptions', $sectionOptions);
+        $templateMgr->assign('sectionId', $request->getUserVar('sectionId'));
 
-	/**
-	 * Perform additional validation checks
-	 * @copydoc Form::validate
-	 */
-	function validate() {
-		if (!parent::validate()) return false;
+        // Get section policies for this context
+        $sectionPolicies = [];
+        foreach ($sectionOptions as $sectionId => $sectionTitle) {
+            $section = $sectionDao->getById($sectionId);
 
-		// Validate that the section ID is attached to this journal.
-		$request = Application::getRequest();
-		$context = $request->getContext();
-		$sectionDao = DAORegistry::getDAO('SectionDAO');
-		$section = $sectionDao->getById($this->getData('sectionId'), $context->getId());
-		if (!$section) return false;
+            $sectionPolicy = $section ? $section->getLocalizedPolicy() : null;
+            if ($this->doesSectionPolicyContainAnyText($sectionPolicy)) {
+                $sectionPolicies[$sectionId] = $sectionPolicy;
+            }
+        }
 
-		return true;
-	}
+        $templateMgr->assign('sectionPolicies', $sectionPolicies);
 
-	/**
-	 * Set the submission data from the form.
-	 * @param $submission Submission
-	 */
-	function setSubmissionData($submission) {
-		$submission->setSectionId($this->getData('sectionId'));
-		parent::setSubmissionData($submission);
-	}
+        return parent::fetch($request, $template, $display);
+    }
+
+    /**
+     * Checks whether a section policy contains any text (plain / readable).
+     */
+    private function doesSectionPolicyContainAnyText($sectionPolicy)
+    {
+        $sectionPolicyPlainText = trim(PKPString::html2text($sectionPolicy));
+        return strlen($sectionPolicyPlainText) > 0;
+    }
+
+    /**
+     * @copydoc PKPSubmissionSubmitStep1Form::initData
+     */
+    public function initData($data = [])
+    {
+        if (isset($this->submission)) {
+            parent::initData([
+                'sectionId' => $this->submission->getCurrentPublication()->getData('sectionId'),
+            ]);
+        } else {
+            parent::initData();
+        }
+    }
+
+    /**
+     * Assign form data to user-submitted data.
+     */
+    public function readInputData()
+    {
+        $this->readUserVars([
+            'sectionId',
+        ]);
+        parent::readInputData();
+    }
+
+    /**
+     * Perform additional validation checks
+     *
+     * @copydoc Form::validate
+     */
+    public function validate($callHooks = true)
+    {
+        if (!parent::validate($callHooks)) {
+            return false;
+        }
+
+        $request = Application::get()->getRequest();
+        $context = $request->getContext();
+        $sectionDao = DAORegistry::getDAO('SectionDAO'); /** @var SectionDAO $sectionDao */
+        $section = $sectionDao->getById($this->getData('sectionId'), $context->getId());
+
+        // Validate that the section ID is attached to this journal.
+        if (!$section) {
+            return false;
+        }
+
+        // Ensure that submissions are enabled and the assigned section is activated
+        if ($context->getData('disableSubmissions') || $section->getIsInactive()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Set the publication data from the form.
+     *
+     * @param Publication $publication
+     * @param Submission $submission
+     */
+    public function setPublicationData($publication, $submission)
+    {
+        $publication->setData('sectionId', $this->getData('sectionId'));
+        parent::setPublicationData($publication, $submission);
+    }
 }
 
-?>
+if (!PKP_STRICT_MODE) {
+    class_alias('\APP\submission\form\SubmissionSubmitStep1Form', '\SubmissionSubmitStep1Form');
+}

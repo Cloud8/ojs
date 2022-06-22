@@ -3,140 +3,187 @@
 /**
  * @file controllers/grid/articleGalleys/form/ArticleGalleyForm.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class ArticleGalleyForm
  * @ingroup controllers_grid_articleGalleys_form
- * @see ArticleGalley
+ *
+ * @see Galley
  *
  * @brief Article galley editing form.
  */
 
-import('lib.pkp.classes.form.Form');
+use APP\facades\Repo;
+use APP\template\TemplateManager;
 
-class ArticleGalleyForm extends Form {
-	/** @var the article */
-	var $_submission = null;
+use PKP\form\Form;
+use PKP\galley\Galley;
 
-	/** @var ArticleGalley current galley */
-	var $_articleGalley = null;
+class ArticleGalleyForm extends Form
+{
+    /** @var Submission */
+    public $_submission = null;
 
-	/**
-	 * Constructor.
-	 * @param $submission Submission
-	 * @param $articleGalley ArticleGalley (optional)
-	 */
-	function __construct($request, $submission, $articleGalley = null) {
-		parent::__construct('controllers/grid/articleGalleys/form/articleGalleyForm.tpl');
-		$this->_submission = $submission;
-		$this->_articleGalley = $articleGalley;
+    /** @var Publication */
+    public $_publication = null;
 
-		AppLocale::requireComponents(LOCALE_COMPONENT_APP_EDITOR, LOCALE_COMPONENT_PKP_SUBMISSION);
+    /** @var Galley current galley */
+    public $_articleGalley = null;
 
-		$this->addCheck(new FormValidator($this, 'label', 'required', 'editor.issues.galleyLabelRequired'));
-		$this->addCheck(new FormValidatorPost($this));
-		$this->addCheck(new FormValidatorCSRF($this));
+    /**
+     * Constructor.
+     *
+     * @param Submission $submission
+     * @param Publication $publication
+     * @param Galley $articleGalley (optional)
+     */
+    public function __construct($request, $submission, $publication, $articleGalley = null)
+    {
+        parent::__construct('controllers/grid/articleGalleys/form/articleGalleyForm.tpl');
+        $this->_submission = $submission;
+        $this->_publication = $publication;
+        $this->_articleGalley = $articleGalley;
 
-		// Ensure a locale is provided and valid
-		$journal = $request->getJournal();
-		$this->addCheck(
-			new FormValidator(
-				$this,
-				'galleyLocale',
-				'required',
-				'editor.issues.galleyLocaleRequired'
-			),
-			create_function(
-				'$galleyLocale, $availableLocales',
-				'return in_array($galleyLocale, $availableLocales);'
-			),
-			array_keys($journal->getSupportedSubmissionLocaleNames())
-		);
-	}
+        $this->addCheck(new \PKP\form\validation\FormValidator($this, 'label', 'required', 'editor.issues.galleyLabelRequired'));
+        $this->addCheck(new \PKP\form\validation\FormValidatorRegExp($this, 'urlPath', 'optional', 'validator.alpha_dash_period', '/^[a-zA-Z0-9]+([\\.\\-_][a-zA-Z0-9]+)*$/'));
+        $this->addCheck(new \PKP\form\validation\FormValidatorPost($this));
+        $this->addCheck(new \PKP\form\validation\FormValidatorCSRF($this));
 
-	/**
-	 * Display the form.
-	 */
-	function fetch($request) {
-		$journal = $request->getJournal();
-		$templateMgr = TemplateManager::getManager($request);
-		if ($this->_articleGalley) $templateMgr->assign(array(
-			'representationId' => $this->_articleGalley->getId(),
-			'articleGalley' => $this->_articleGalley,
-			'articleGalleyFile' => $this->_articleGalley->getFile(),
-		));
-		$templateMgr->assign(array(
-			'supportedLocales' => $journal->getSupportedSubmissionLocaleNames(),
-			'submissionId' => $this->_submission->getId(),
-		));
+        // Ensure a locale is provided and valid
+        $journal = $request->getJournal();
+        $this->addCheck(
+            new \PKP\form\validation\FormValidator(
+                $this,
+                'locale',
+                'required',
+                'editor.issues.galleyLocaleRequired'
+            ),
+            function ($locale) use ($journal) {
+                return in_array($locale, $journal->getSupportedSubmissionLocaleNames());
+            }
+        );
+    }
 
-		return parent::fetch($request);
-	}
+    /**
+     * @copydoc Form::fetch()
+     *
+     * @param null|mixed $template
+     */
+    public function fetch($request, $template = null, $display = false)
+    {
+        $templateMgr = TemplateManager::getManager($request);
+        if ($this->_articleGalley) {
+            $articleGalleyFile = $this->_articleGalley->getFile();
+            $templateMgr->assign([
+                'representationId' => $this->_articleGalley->getId(),
+                'articleGalley' => $this->_articleGalley,
+                'articleGalleyFile' => $articleGalleyFile,
+                'supportsDependentFiles' => $articleGalleyFile ? Repo::submissionFile()->supportsDependentFiles($articleGalleyFile) : null,
+            ]);
+        }
+        $context = $request->getContext();
+        $templateMgr->assign([
+            'supportedLocales' => $context->getSupportedSubmissionLocaleNames(),
+            'submissionId' => $this->_submission->getId(),
+            'publicationId' => $this->_publication->getId(),
+        ]);
 
-	/**
-	 * Initialize form data from current galley (if applicable).
-	 */
-	function initData() {
-		if ($this->_articleGalley) {
-			$this->_data = array(
-				'label' => $this->_articleGalley->getLabel(),
-				'galleyLocale' => $this->_articleGalley->getLocale(),
-				'remoteURL' => $this->_articleGalley->getRemoteURL(),
-			);
-		} else {
-			$this->_data = array();
-		}
-	}
+        return parent::fetch($request, $template, $display);
+    }
 
-	/**
-	 * Assign form data to user-submitted data.
-	 */
-	function readInputData() {
-		$this->readUserVars(
-			array(
-				'label',
-				'galleyLocale',
-				'remoteURL',
-			)
-		);
-	}
+    /**
+     * @copydoc Form::validate
+     */
+    public function validate($callHooks = true)
+    {
+        // Validate the urlPath
+        if ($this->getData('urlPath')) {
+            if (ctype_digit((string) $this->getData('urlPath'))) {
+                $this->addError('urlPath', __('publication.urlPath.numberInvalid'));
+                $this->addErrorField('urlPath');
+            } else {
+                $existingGalley = Repo::galley()->getByUrlPath((string) $this->getData('urlPath'), $this->_publication);
+                if ($existingGalley && (!$this->_articleGalley || $this->_articleGalley->getId() !== $existingGalley->getId())) {
+                    $this->addError('urlPath', __('publication.urlPath.duplicate'));
+                    $this->addErrorField('urlPath');
+                }
+            }
+        }
 
-	/**
-	 * Save changes to the galley.
-	 * @param $request PKPRequest
-	 * @return ArticleGalley The resulting article galley.
-	 */
-	function execute($request) {
-		import('classes.file.IssueFileManager');
+        return parent::validate($callHooks);
+    }
 
-		$journal = $request->getJournal();
-		$articleGalley = $this->_articleGalley;
-		$articleGalleyDao = DAORegistry::getDAO('ArticleGalleyDAO');
+    /**
+     * Initialize form data from current galley (if applicable).
+     */
+    public function initData()
+    {
+        if ($this->_articleGalley) {
+            $this->_data = [
+                'label' => $this->_articleGalley->getLabel(),
+                'locale' => $this->_articleGalley->getLocale(),
+                'urlPath' => $this->_articleGalley->getData('urlPath'),
+                'urlRemote' => $this->_articleGalley->getData('urlRemote'),
+            ];
+        } else {
+            $this->_data = [];
+        }
+    }
 
-		if ($articleGalley) {
-			$articleGalley->setLabel($this->getData('label'));
-			$articleGalley->setLocale($this->getData('galleyLocale'));
-			$articleGalley->setRemoteURL($this->getData('remoteURL'));
+    /**
+     * Assign form data to user-submitted data.
+     */
+    public function readInputData()
+    {
+        $this->readUserVars(
+            [
+                'label',
+                'locale',
+                'urlPath',
+                'urlRemote',
+            ]
+        );
+    }
 
-			// Update galley in the db
-			$articleGalleyDao->updateObject($articleGalley);
-		} else {
-			// Create a new galley
-			$articleGalley = $articleGalleyDao->newDataObject();
-			$articleGalley->setSubmissionId($this->_submission->getId());
-			$articleGalley->setLabel($this->getData('label'));
-			$articleGalley->setLocale($this->getData('galleyLocale'));
-			$articleGalley->setRemoteURL($this->getData('remoteURL'));
+    /**
+     * Save changes to the galley.
+     *
+     * @return Galley The resulting article galley.
+     */
+    public function execute(...$functionArgs)
+    {
+        $articleGalley = $this->_articleGalley;
 
-			// Insert new galley into the db
-			$articleGalleyDao->insertObject($articleGalley);
-			$this->_articleGalley = $articleGalley;
-		}
+        if ($articleGalley) {
 
-		return $articleGalley;
-	}
+            // Update galley in the db
+            $newData = [
+                'label' => $this->getData('label'),
+                'locale' => $this->getData('locale'),
+                'urlPath' => $this->getData('urlPath'),
+                'urlRemote' => $this->getData('urlRemote')
+            ];
+            Repo::galley()->edit($articleGalley, $newData);
+        } else {
+            // Create a new galley
+            $articleGalley = Repo::galley()->newDataObject([
+                'publicationId' => $this->_publication->getId(),
+                'label' => $this->getData('label'),
+                'locale' => $this->getData('locale'),
+                'urlPath' => $this->getData('urlPath'),
+                'urlRemote' => $this->getData('urlRemote')
+            ]);
+
+
+            $galleyId = Repo::galley()->add($articleGalley);
+            $articleGalley = Repo::galley()->get($galleyId);
+            $this->_articleGalley = $articleGalley;
+        }
+
+        parent::execute(...$functionArgs);
+
+        return $articleGalley;
+    }
 }
-
-?>

@@ -3,28 +3,36 @@
 /**
  * @file classes/subscription/IndividualSubscription.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class IndividualSubscription
- * @ingroup subscription 
+ * @ingroup subscription
+ *
  * @see IndividualSubscriptionDAO
  *
  * @brief Basic class describing an individual (non-institutional) subscription.
  */
 
-import('classes.subscription.Subscription');
+namespace APP\subscription;
 
-class IndividualSubscription extends Subscription {
+use PKP\db\DAORegistry;
 
-	/**
-	 * Check whether subscription is valid
-	 */
-	function isValid($check = SUBSCRIPTION_DATE_BOTH, $checkDate = null) {
-		$subscriptionDao = DAORegistry::getDAO('IndividualSubscriptionDAO');
-		return $subscriptionDao->isValidIndividualSubscription($this->getData('userId'), $this->getData('journalId'), $check, $checkDate);	
-	}
+class IndividualSubscription extends Subscription
+{
+    /**
+     * Check whether subscription is valid
+     *
+     * @param null|mixed $checkDate
+     */
+    public function isValid($check = self::SUBSCRIPTION_DATE_BOTH, $checkDate = null)
+    {
+        $subscriptionDao = DAORegistry::getDAO('IndividualSubscriptionDAO'); /** @var IndividualSubscriptionDAO $subscriptionDao */
+        return $subscriptionDao->isValidIndividualSubscription($this->getData('userId'), $this->getData('journalId'), $check, $checkDate);
+    }
 }
 
-?>
+if (!PKP_STRICT_MODE) {
+    class_alias('\APP\subscription\IndividualSubscription', '\IndividualSubscription');
+}

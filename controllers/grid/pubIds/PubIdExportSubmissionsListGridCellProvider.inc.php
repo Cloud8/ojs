@@ -3,9 +3,9 @@
 /**
  * @file controllers/grid/pubIds/PubIdExportSubmissionsListGridCellProvider.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2000-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2000-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class PubIdExportSubmissionsListGridCellProvider
  * @ingroup controllers_grid_pubIds
@@ -15,30 +15,23 @@
 
 import('controllers.grid.submissions.ExportPublishedSubmissionsListGridCellProvider');
 
+use APP\submission\Submission;
 
-class PubIdExportSubmissionsListGridCellProvider extends ExportPublishedSubmissionsListGridCellProvider {
-	/**
-	 * Constructor
-	 */
-	function __construct($plugin, $authorizedRoles = null) {
-		parent::__construct($plugin, $authorizedRoles);
-	}
+class PubIdExportSubmissionsListGridCellProvider extends ExportPublishedSubmissionsListGridCellProvider
+{
+    /**
+     * @copydoc ExportPublishedSubmissionsListGridCellProvider::getTemplateVarsFromRowColumn()
+     */
+    public function getTemplateVarsFromRowColumn($row, $column)
+    {
+        $submission = $row->getData();
+        $columnId = $column->getId();
+        assert($submission instanceof Submission && !empty($columnId));
 
-	/**
-	 * @copydoc ExportPublishedSubmissionsListGridCellProvider::getTemplateVarsFromRowColumn()
-	 */
-	function getTemplateVarsFromRowColumn($row, $column) {
-		$publishedSubmission = $row->getData();
-		$columnId = $column->getId();
-		assert(is_a($publishedSubmission, 'PublishedArticle') && !empty($columnId));
-
-		switch ($columnId) {
-			case 'pubId':
-				return array('label' => $publishedSubmission->getStoredPubId($this->_plugin->getPubIdType()));
-		}
-		return parent::getTemplateVarsFromRowColumn($row, $column);
-	}
-
+        switch ($columnId) {
+            case 'pubId':
+                return ['label' => $submission->getStoredPubId($this->_plugin->getPubIdType())];
+        }
+        return parent::getTemplateVarsFromRowColumn($row, $column);
+    }
 }
-
-?>

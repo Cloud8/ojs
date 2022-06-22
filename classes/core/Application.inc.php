@@ -3,255 +3,263 @@
 /**
  * @file classes/core/Application.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class Application
  * @ingroup core
+ *
  * @see PKPApplication
  *
  * @brief Class describing this application.
  *
  */
 
-import('lib.pkp.classes.core.PKPApplication');
+namespace APP\core;
 
-define('PHP_REQUIRED_VERSION', '5.2.0');
+use APP\facades\Repo;
+use PKP\core\PKPApplication;
+use PKP\db\DAORegistry;
+use PKP\facades\Locale;
+use PKP\security\Role;
+use PKP\submission\RepresentationDAOInterface;
+
 define('REQUIRES_XSL', false);
 
-define('ASSOC_TYPE_ARTICLE',		ASSOC_TYPE_SUBMISSION);
-define('ASSOC_TYPE_PUBLISHED_ARTICLE',	ASSOC_TYPE_PUBLISHED_SUBMISSION);
-define('ASSOC_TYPE_GALLEY',		ASSOC_TYPE_REPRESENTATION);
+define('ASSOC_TYPE_ARTICLE', PKPApplication::ASSOC_TYPE_SUBMISSION); // DEPRECATED but needed by filter framework
+define('ASSOC_TYPE_GALLEY', PKPApplication::ASSOC_TYPE_REPRESENTATION);
 
-define('ASSOC_TYPE_JOURNAL',		0x0000100);
-define('ASSOC_TYPE_ISSUE',		0x0000103);
-define('ASSOC_TYPE_ISSUE_GALLEY',	0x0000105);
+define('ASSOC_TYPE_JOURNAL', 0x0000100);
+define('ASSOC_TYPE_ISSUE', 0x0000103);
+define('ASSOC_TYPE_ISSUE_GALLEY', 0x0000105);
 
 define('CONTEXT_JOURNAL', 1);
 
-class Application extends PKPApplication {
-	/**
-	 * Constructor
-	 */
-	public function __construct() {
-		parent::__construct();
+define('METRIC_TYPE_COUNTER', 'ojs::counter');
 
-		// Register custom autoloader function for OJS namespace
-		spl_autoload_register(function($class) {
-			$prefix = 'OJS\\';
-			$rootPath = BASE_SYS_DIR . "/classes";
-			customAutoload($rootPath, $prefix, $class);
-		});
-	}
+class Application extends PKPApplication
+{
+    /**
+     * Constructor
+     */
+    public function __construct()
+    {
+        parent::__construct();
+        if (!PKP_STRICT_MODE && !class_exists('\Application')) {
+            class_alias('\APP\core\Application', '\Application');
+        }
 
-	/**
-	 * Get the "context depth" of this application, i.e. the number of
-	 * parts of the URL after index.php that represent the context of
-	 * the current request (e.g. Journal [1], or Conference and
-	 * Scheduled Conference [2]).
-	 * @return int
-	 */
-	function getContextDepth() {
-		return 1;
-	}
+        // Add application locales
+        Locale::registerPath(BASE_SYS_DIR . '/locale');
+    }
 
-	/**
-	 * Get the list of context elements.
-	 * @return array
-	 */
-	function getContextList() {
-		return array('journal');
-	}
+    /**
+     * Get the "context depth" of this application, i.e. the number of
+     * parts of the URL after index.php that represent the context of
+     * the current request (e.g. Journal [1], or Conference and
+     * Scheduled Conference [2]).
+     *
+     * @return int
+     */
+    public function getContextDepth()
+    {
+        return 1;
+    }
 
-	/**
-	 * Get the symbolic name of this application
-	 * @return string
-	 */
-	function getName() {
-		return 'ojs2';
-	}
+    /**
+     * Get the list of context elements.
+     *
+     * @return array
+     */
+    public function getContextList()
+    {
+        return ['journal'];
+    }
 
-	/**
-	 * Get the locale key for the name of this application.
-	 * @return string
-	 */
-	function getNameKey() {
-		return('common.openJournalSystems');
-	}
+    /**
+     * Get the symbolic name of this application
+     *
+     * @return string
+     */
+    public static function getName()
+    {
+        return 'ojs2';
+    }
 
-	/**
-	 * Get the URL to the XML descriptor for the current version of this
-	 * application.
-	 * @return string
-	 */
-	function getVersionDescriptorUrl() {
-		return('http://pkp.sfu.ca/ojs/xml/ojs-version.xml');
-	}
+    /**
+     * Get the locale key for the name of this application.
+     *
+     * @return string
+     */
+    public function getNameKey()
+    {
+        return('common.software');
+    }
 
-	/**
-	 * Get the map of DAOName => full.class.Path for this application.
-	 * @return array
-	 */
-	function getDAOMap() {
-		return array_merge(parent::getDAOMap(), array(
-			'ArticleDAO' => 'classes.article.ArticleDAO',
-			'ArticleGalleyDAO' => 'classes.article.ArticleGalleyDAO',
-			'ArticleSearchDAO' => 'classes.search.ArticleSearchDAO',
-			'AuthorDAO' => 'classes.article.AuthorDAO',
-			'IndividualSubscriptionDAO' => 'classes.subscription.IndividualSubscriptionDAO',
-			'InstitutionalSubscriptionDAO' => 'classes.subscription.InstitutionalSubscriptionDAO',
-			'IssueDAO' => 'classes.issue.IssueDAO',
-			'IssueGalleyDAO' => 'classes.issue.IssueGalleyDAO',
-			'IssueFileDAO' => 'classes.issue.IssueFileDAO',
-			'JournalDAO' => 'classes.journal.JournalDAO',
-			'JournalSettingsDAO' => 'classes.journal.JournalSettingsDAO',
-			'MetricsDAO' => 'classes.statistics.MetricsDAO',
-			'OAIDAO' => 'classes.oai.ojs.OAIDAO',
-			'OJSCompletedPaymentDAO' => 'classes.payment.ojs.OJSCompletedPaymentDAO',
-			'PublishedArticleDAO' => 'classes.article.PublishedArticleDAO',
-			'ReviewerSubmissionDAO' => 'classes.submission.reviewer.ReviewerSubmissionDAO',
-			'SectionDAO' => 'classes.journal.SectionDAO',
-			'SubmissionEventLogDAO' => 'classes.log.SubmissionEventLogDAO',
-			'SubmissionFileDAO' => 'classes.article.SubmissionFileDAO',
-			'SubscriptionDAO' => 'classes.subscription.SubscriptionDAO',
-			'SubscriptionTypeDAO' => 'classes.subscription.SubscriptionTypeDAO',
-			'UserDAO' => 'classes.user.UserDAO',
-			'UserSettingsDAO' => 'classes.user.UserSettingsDAO'
-		));
-	}
+    /**
+     * Get the URL to the XML descriptor for the current version of this
+     * application.
+     *
+     * @return string
+     */
+    public function getVersionDescriptorUrl()
+    {
+        return('http://pkp.sfu.ca/ojs/xml/ojs-version.xml');
+    }
 
-	/**
-	 * Get the list of plugin categories for this application.
-	 * @return array
-	 */
-	function getPluginCategories() {
-		return array(
-			// NB: Meta-data plug-ins are first in the list as this
-			// will make them load (and install) first.
-			// This is necessary as several other plug-in categories
-			// depend on meta-data. This is a very rudimentary type of
-			// dependency management for plug-ins.
-			'metadata',
-			'auth',
-			'blocks',
-			// NB: 'citationFormats' is an obsolete category for backwards
-			// compatibility only. This will be replaced by 'citationOutput',
-			// see #5156.
-			'citationFormats',
-			'citationLookup',
-			'citationOutput',
-			'citationParser',
-			'gateways',
-			'generic',
-			'importexport',
-			'oaiMetadataFormats',
-			'paymethod',
-			'pubIds',
-			'reports',
-			'themes'
-		);
-	}
+    /**
+     * Get the map of DAOName => full.class.Path for this application.
+     *
+     * @return array
+     */
+    public function getDAOMap()
+    {
+        return array_merge(parent::getDAOMap(), [
+            'ArticleSearchDAO' => 'APP\search\ArticleSearchDAO',
+            'IndividualSubscriptionDAO' => 'APP\subscription\IndividualSubscriptionDAO',
+            'InstitutionalSubscriptionDAO' => 'APP\subscription\InstitutionalSubscriptionDAO',
+            'IssueGalleyDAO' => 'APP\issue\IssueGalleyDAO',
+            'IssueFileDAO' => 'APP\issue\IssueFileDAO',
+            'JournalDAO' => 'APP\journal\JournalDAO',
+            'MetricsDAO' => 'APP\statistics\MetricsDAO',
+            'OAIDAO' => 'APP\oai\ojs\OAIDAO',
+            'OJSCompletedPaymentDAO' => 'APP\payment\ojs\OJSCompletedPaymentDAO',
+            'ReviewerSubmissionDAO' => 'APP\submission\reviewer\ReviewerSubmissionDAO',
+            'SectionDAO' => 'APP\journal\SectionDAO',
+            'SubscriptionDAO' => 'APP\subscription\SubscriptionDAO',
+            'SubscriptionTypeDAO' => 'APP\subscription\SubscriptionTypeDAO',
+        ]);
+    }
 
-	/**
-	 * Get the top-level context DAO.
-	 * @return ContextDAO
-	 */
-	static function getContextDAO() {
-		return DAORegistry::getDAO('JournalDAO');
-	}
+    /**
+     * Get the list of plugin categories for this application.
+     *
+     * @return array
+     */
+    public function getPluginCategories()
+    {
+        return [
+            // NB: Meta-data plug-ins are first in the list as this
+            // will make them load (and install) first.
+            // This is necessary as several other plug-in categories
+            // depend on meta-data. This is a very rudimentary type of
+            // dependency management for plug-ins.
+            'metadata',
+            'auth',
+            'blocks',
+            'gateways',
+            'generic',
+            'importexport',
+            'oaiMetadataFormats',
+            'paymethod',
+            'pubIds',
+            'reports',
+            'themes'
+        ];
+    }
 
-	/**
-	 * Get the submission DAO.
-	 * @return SubmissionDAO
-	 */
-	static function getSubmissionDAO() {
-		return DAORegistry::getDAO('ArticleDAO');
-	}
+    /**
+     * Get the top-level context DAO.
+     *
+     * @return ContextDAO
+     */
+    public static function getContextDAO()
+    {
+        return DAORegistry::getDAO('JournalDAO');
+    }
 
-	/**
-	 * Get the section DAO.
-	 * @return SectionDAO
-	 */
-	static function getSectionDAO() {
-		return DAORegistry::getDAO('SectionDAO');
-	}
+    /**
+     * Get the section DAO.
+     *
+     * @return SectionDAO
+     */
+    public static function getSectionDAO()
+    {
+        return DAORegistry::getDAO('SectionDAO');
+    }
 
-	/**
-	 * Get the representation DAO.
-	 * @return RepresentationDAO
-	 */
-	static function getRepresentationDAO() {
-		return DAORegistry::getDAO('ArticleGalleyDAO');
-	}
+    /**
+     * Get the representation DAO.
+     */
+    public static function getRepresentationDAO(): RepresentationDAOInterface
+    {
+        return Repo::galley()->dao;
+    }
 
-	/**
-	 * Returns the name of the context column in plugin_settings
-	 * @return string
-	 */
-	static function getPluginSettingsContextColumnName() {
-		if (defined('SESSION_DISABLE_INIT')) {
-			$pluginSettingsDao = DAORegistry::getDAO('PluginSettingsDAO');
-			$driver = $pluginSettingsDao->getDriver();
-			switch ($driver) {
-				case 'mysql':
-				case 'mysqli':
-					$checkResult = $pluginSettingsDao->retrieve('SHOW COLUMNS FROM plugin_settings LIKE ?', array('context_id'));
-					if ($checkResult->NumRows() == 0) {
-						return 'journal_id';
-					}
-					break;
-				case 'postgres':
-					$checkResult = $pluginSettingsDao->retrieve('SELECT column_name FROM information_schema.columns WHERE table_name = ? AND column_name = ?', array('plugin_settings', 'context_id'));
-					if ($checkResult->NumRows() == 0) {
-						return 'journal_id';
-					}
-					break;
-				default: fatalError('Unknown database type!');
-			}
-		}
-		return 'context_id';
-	}
+    /**
+     * Get a SubmissionSearchIndex instance.
+     */
+    public static function getSubmissionSearchIndex()
+    {
+        return new \APP\search\ArticleSearchIndex();
+    }
 
-	/**
-	 * Get the stages used by the application.
-	 * @return array
-	 */
-	static function getApplicationStages() {
-		// We leave out WORKFLOW_STAGE_ID_PUBLISHED since it technically is not a 'stage'.
-		return array(
-				WORKFLOW_STAGE_ID_SUBMISSION,
-				WORKFLOW_STAGE_ID_EXTERNAL_REVIEW,
-				WORKFLOW_STAGE_ID_EDITING,
-				WORKFLOW_STAGE_ID_PRODUCTION
-		);
-	}
+    /**
+     * Get a SubmissionSearchDAO instance.
+     */
+    public static function getSubmissionSearchDAO()
+    {
+        return DAORegistry::getDAO('ArticleSearchDAO');
+    }
 
-	/**
-	 * Returns the context type for this application.
-	 * @return int ASSOC_TYPE_...
-	 */
-	static function getContextAssocType() {
-		return ASSOC_TYPE_JOURNAL;
-	}
+    /**
+     * Get the stages used by the application.
+     *
+     * @return array
+     */
+    public static function getApplicationStages()
+    {
+        // We leave out WORKFLOW_STAGE_ID_PUBLISHED since it technically is not a 'stage'.
+        return [
+            WORKFLOW_STAGE_ID_SUBMISSION,
+            WORKFLOW_STAGE_ID_EXTERNAL_REVIEW,
+            WORKFLOW_STAGE_ID_EDITING,
+            WORKFLOW_STAGE_ID_PRODUCTION
+        ];
+    }
 
-	/**
-	 * Get the file directory array map used by the application.
-	 */
-	static function getFileDirectories() {
-		return array('context' => '/journals/', 'submission' => '/articles/');
-	}
+    /**
+     * Returns the context type for this application.
+     *
+     * @return int ASSOC_TYPE_...
+     */
+    public static function getContextAssocType()
+    {
+        return ASSOC_TYPE_JOURNAL;
+    }
 
-	/**
-	 * @copydoc PKPApplication::getRoleNames()
-	 */
-	static function getRoleNames($contextOnly = false, $roleIds = null) {
-		$roleNames = parent::getRoleNames($contextOnly, $roleIds);
-		if (!$roleIds || !in_array(ROLE_ID_SUBSCRIPTION_MANAGER, $roleIds)) {
-			$roleNames[ROLE_ID_SUBSCRIPTION_MANAGER] = 'user.role.subscriptionManager';
-		}
-		return $roleNames;
-	}
+    /**
+     * Get the file directory array map used by the application.
+     */
+    public static function getFileDirectories()
+    {
+        return ['context' => '/journals/', 'submission' => '/articles/'];
+    }
+
+    /**
+     * @copydoc PKPApplication::getRoleNames()
+     *
+     * @param null|mixed $roleIds
+     */
+    public static function getRoleNames($contextOnly = false, $roleIds = null)
+    {
+        $roleNames = parent::getRoleNames($contextOnly, $roleIds);
+        if (!$roleIds || in_array(Role::ROLE_ID_SUBSCRIPTION_MANAGER, $roleIds)) {
+            $roleNames[Role::ROLE_ID_SUBSCRIPTION_MANAGER] = 'user.role.subscriptionManager';
+        }
+        return $roleNames;
+    }
+
+    /**
+     * Get the payment manager.
+     *
+     * @param Context $context
+     *
+     * @return OJSPaymentManager
+     */
+    public static function getPaymentManager($context)
+    {
+        return new \APP\payment\ojs\OJSPaymentManager($context);
+    }
 }
-
-?>

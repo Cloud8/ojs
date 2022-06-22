@@ -3,9 +3,9 @@
 /**
  * @file pages/information/InformationHandler.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class InformationHandler
  * @ingroup pages_information
@@ -13,83 +13,106 @@
  * @brief Display journal information.
  */
 
-import('classes.handler.Handler');
+use APP\handler\Handler;
+use APP\template\TemplateManager;
+use PKP\security\authorization\ContextRequiredPolicy;
 
-class InformationHandler extends Handler {
+class InformationHandler extends Handler
+{
+    /**
+     * @see PKPHandler::authorize()
+     */
+    public function authorize($request, &$args, $roleAssignments)
+    {
+        $context = $request->getContext();
+        if (!$context || !$context->getSetting('restrictSiteAccess')) {
+            $templateMgr = TemplateManager::getManager($request);
+            $templateMgr->setCacheability(TemplateManager::CACHEABILITY_PUBLIC);
+        }
 
-	/**
-	 * Display the information page for the journal.
-	 * @param $args array
-	 * @param $request PKPRequest
-	 */
-	function index($args, $request) {
-		$this->setupTemplate($request);
-		$this->validate(null, $request);
-		$journal = $request->getJournal();
+        $this->addPolicy(new ContextRequiredPolicy($request));
+        return parent::authorize($request, $args, $roleAssignments);
+    }
 
-		switch(array_shift($args)) {
-			case 'readers':
-				$content = $journal->getLocalizedSetting('readerInformation');
-				$pageTitle = 'navigation.infoForReaders.long';
-				break;
-			case 'authors':
-				$content = $journal->getLocalizedSetting('authorInformation');
-				$pageTitle = 'navigation.infoForAuthors.long';
-				break;
-			case 'librarians':
-				$content = $journal->getLocalizedSetting('librarianInformation');
-				$pageTitle = 'navigation.infoForLibrarians.long';
-				break;
-			case 'competingInterestGuidelines':
-				$content = $journal->getLocalizedSetting('competingInterestsPolicy');
-				$pageTitle = 'navigation.competingInterestGuidelines';
-				break;
-			case 'sampleCopyrightWording':
-				AppLocale::requireComponents(LOCALE_COMPONENT_APP_MANAGER);
-				$content = __('manager.setup.authorCopyrightNotice.sample');
-				$pageTitle = 'manager.setup.copyrightNotice';
-				break;
-			default:
-				return $request->redirect($journal->getPath());
-		}
+    /**
+     * Display the information page for the journal.
+     *
+     * @param array $args
+     * @param PKPRequest $request
+     */
+    public function index($args, $request)
+    {
+        $this->setupTemplate($request);
+        $this->validate(null, $request);
+        $journal = $request->getJournal();
 
-		$templateMgr = TemplateManager::getManager($request);
-		$templateMgr->assign('pageTitle', $pageTitle);
-		$templateMgr->assign('content', $content);
-		$templateMgr->display('frontend/pages/information.tpl');
-	}
+        switch (array_shift($args)) {
+            case 'readers':
+                $content = $journal->getLocalizedData('readerInformation');
+                $pageTitle = 'navigation.infoForReaders.long';
+                break;
+            case 'authors':
+                $content = $journal->getLocalizedData('authorInformation');
+                $pageTitle = 'navigation.infoForAuthors.long';
+                break;
+            case 'librarians':
+                $content = $journal->getLocalizedData('librarianInformation');
+                $pageTitle = 'navigation.infoForLibrarians.long';
+                break;
+            case 'competingInterestGuidelines':
+                $content = $journal->getLocalizedData('competingInterestsPolicy');
+                $pageTitle = 'navigation.competingInterestGuidelines';
+                break;
+            case 'sampleCopyrightWording':
+                $content = __('manager.setup.copyrightNotice.sample');
+                $pageTitle = 'manager.setup.copyrightNotice';
+                break;
+            default:
+                return $request->redirect($journal->getPath());
+        }
 
-	function readers($args, $request) {
-		$this->index(array('readers'), $request);
-	}
+        $templateMgr = TemplateManager::getManager($request);
+        $templateMgr->assign('pageTitle', $pageTitle);
+        $templateMgr->assign('content', $content);
+        $templateMgr->display('frontend/pages/information.tpl');
+    }
 
-	function authors($args, $request) {
-		$this->index(array('authors'), $request);
-	}
+    public function readers($args, $request)
+    {
+        $this->index(['readers'], $request);
+    }
 
-	function librarians($args, $request) {
-		$this->index(array('librarians'), $request);
-	}
+    public function authors($args, $request)
+    {
+        $this->index(['authors'], $request);
+    }
 
-	function competingInterestGuidelines($args, $request) {
-		$this->index(array('competingInterestGuidelines'), $request);
-	}
+    public function librarians($args, $request)
+    {
+        $this->index(['librarians'], $request);
+    }
 
-	function sampleCopyrightWording($args, $request) {
-		$this->index(array('sampleCopyrightWording'), $request);
-	}
+    public function competingInterestGuidelines($args, $request)
+    {
+        $this->index(['competingInterestGuidelines'], $request);
+    }
 
-	/**
-	 * Initialize the template.
-	 * @param $request PKPRequest
-	 */
-	function setupTemplate($request) {
-		parent::setupTemplate($request);
-		if (!$request->getJournal()->getSetting('restrictSiteAccess')) {
-			$templateMgr = TemplateManager::getManager($request);
-			$templateMgr->setCacheability(CACHEABILITY_PUBLIC);
-		}
-	}
+    public function sampleCopyrightWording($args, $request)
+    {
+        $this->index(['sampleCopyrightWording'], $request);
+    }
+
+    /**
+     * Initialize the template.
+     *
+     * @param PKPRequest $request
+     */
+    public function setupTemplate($request)
+    {
+        parent::setupTemplate($request);
+        if (!$request->getJournal()->getData('restrictSiteAccess')) {
+            $templateMgr = TemplateManager::getManager($request);
+            $templateMgr->setCacheability(TemplateManager::CACHEABILITY_PUBLIC);
+        }
+    }
 }
-
-?>

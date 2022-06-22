@@ -3,359 +3,413 @@
 /**
  * @file classes/submission/reviewer/ReviewerSubmission.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class ReviewerSubmission
  * @ingroup submission
+ *
  * @see ReviewerSubmissionDAO
  *
  * @brief ReviewerSubmission class.
  */
 
-import('classes.article.Article');
+namespace APP\submission\reviewer;
 
-class ReviewerSubmission extends Article {
+use APP\submission\Submission;
 
-	/** @var array SubmissionFile reviewer file revisions of this submission */
-	var $reviewerFileRevisions;
+class ReviewerSubmission extends Submission
+{
+    /** @var array SubmissionFile reviewer file revisions of this submission */
+    public $reviewerFileRevisions;
 
-	/** @var array SubmissionComments peer review comments of this submission */
-	var $peerReviewComments;
+    /** @var array SubmissionComments peer review comments of this submission */
+    public $peerReviewComments;
 
-	/** @var array the editor decisions of this submission */
-	var $editorDecisions;
+    /**
+     * Get/Set Methods.
+     */
 
+    /**
+     * Get the competing interests for this submission.
+     *
+     * @return string
+     */
+    public function getCompetingInterests()
+    {
+        return $this->getData('competingInterests');
+    }
 
-	/**
-	 * Get/Set Methods.
-	 */
+    /**
+     * Set the competing interests statement.
+     *
+     * @param string $competingInterests
+     */
+    public function setCompetingInterests($competingInterests)
+    {
+        $this->setData('competingInterests', $competingInterests);
+    }
 
-	/**
-	 * Get the competing interests for this submission.
-	 * @return string
-	 */
-	function getCompetingInterests() {
-		return $this->getData('competingInterests');
-	}
+    /**
+     * Get ID of review assignment.
+     *
+     * @return int
+     */
+    public function getReviewId()
+    {
+        return $this->getData('reviewId');
+    }
 
-	/**
-	 * Set the competing interests statement.
-	 * @param $competingInterests string
-	 */
-	function setCompetingInterests($competingInterests) {
-		return $this->setData('competingInterests', $competingInterests);
-	}
+    /**
+     * Set ID of review assignment
+     *
+     * @param int $reviewId
+     */
+    public function setReviewId($reviewId)
+    {
+        $this->setData('reviewId', $reviewId);
+    }
 
-	/**
-	 * Get ID of review assignment.
-	 * @return int
-	 */
-	function getReviewId() {
-		return $this->getData('reviewId');
-	}
+    /**
+     * Get ID of reviewer.
+     *
+     * @return int
+     */
+    public function getReviewerId()
+    {
+        return $this->getData('reviewerId');
+    }
 
-	/**
-	 * Set ID of review assignment
-	 * @param $reviewId int
-	 */
-	function setReviewId($reviewId) {
-		return $this->setData('reviewId', $reviewId);
-	}
+    /**
+     * Set ID of reviewer.
+     *
+     * @param int $reviewerId
+     */
+    public function setReviewerId($reviewerId)
+    {
+        $this->setData('reviewerId', $reviewerId);
+    }
 
-	/**
-	 * Get ID of reviewer.
-	 * @return int
-	 */
-	function getReviewerId() {
-		return $this->getData('reviewerId');
-	}
+    /**
+     * Get full name of reviewer.
+     *
+     * @return string
+     */
+    public function getReviewerFullName()
+    {
+        return $this->getData('reviewerFullName');
+    }
 
-	/**
-	 * Set ID of reviewer.
-	 * @param $reviewerId int
-	 */
-	function setReviewerId($reviewerId) {
-		return $this->setData('reviewerId', $reviewerId);
-	}
+    /**
+     * Set full name of reviewer.
+     *
+     * @param string $reviewerFullName
+     */
+    public function setReviewerFullName($reviewerFullName)
+    {
+        $this->setData('reviewerFullName', $reviewerFullName);
+    }
 
-	/**
-	 * Get full name of reviewer.
-	 * @return string
-	 */
-	function getReviewerFullName() {
-		return $this->getData('reviewerFullName');
-	}
+    /**
+     * Get reviewer recommendation.
+     *
+     * @return string
+     */
+    public function getRecommendation()
+    {
+        return $this->getData('recommendation');
+    }
 
-	/**
-	 * Set full name of reviewer.
-	 * @param $reviewerFullName string
-	 */
-	function setReviewerFullName($reviewerFullName) {
-		return $this->setData('reviewerFullName', $reviewerFullName);
-	}
+    /**
+     * Set reviewer recommendation.
+     *
+     * @param string $recommendation
+     */
+    public function setRecommendation($recommendation)
+    {
+        $this->setData('recommendation', $recommendation);
+    }
 
-	/**
-	 * Get editor decisions.
-	 * @return array
-	 */
-	function getDecisions() {
-		return $this->editorDecisions;
-	}
+    /**
+     * Get the reviewer's assigned date.
+     *
+     * @return string
+     */
+    public function getDateAssigned()
+    {
+        return $this->getData('dateAssigned');
+    }
 
-	/**
-	 * Set editor decisions.
-	 * @param $editorDecisions array
-	 * @param $round int
-	 */
-	function setDecisions($editorDecisions) {
-		return $this->editorDecisions = $editorDecisions;
-	}
+    /**
+     * Set the reviewer's assigned date.
+     *
+     * @param string $dateAssigned
+     */
+    public function setDateAssigned($dateAssigned)
+    {
+        $this->setData('dateAssigned', $dateAssigned);
+    }
 
-	/**
-	 * Get reviewer recommendation.
-	 * @return string
-	 */
-	function getRecommendation() {
-		return $this->getData('recommendation');
-	}
+    /**
+     * Get the reviewer's notified date.
+     *
+     * @return string
+     */
+    public function getDateNotified()
+    {
+        return $this->getData('dateNotified');
+    }
 
-	/**
-	 * Set reviewer recommendation.
-	 * @param $recommendation string
-	 */
-	function setRecommendation($recommendation) {
-		return $this->setData('recommendation', $recommendation);
-	}
+    /**
+     * Set the reviewer's notified date.
+     *
+     * @param string $dateNotified
+     */
+    public function setDateNotified($dateNotified)
+    {
+        $this->setData('dateNotified', $dateNotified);
+    }
 
-	/**
-	 * Get the reviewer's assigned date.
-	 * @return string
-	 */
-	function getDateAssigned() {
-		return $this->getData('dateAssigned');
-	}
+    /**
+     * Get the reviewer's confirmed date.
+     *
+     * @return string
+     */
+    public function getDateConfirmed()
+    {
+        return $this->getData('dateConfirmed');
+    }
 
-	/**
-	 * Set the reviewer's assigned date.
-	 * @param $dateAssigned string
-	 */
-	function setDateAssigned($dateAssigned) {
-		return $this->setData('dateAssigned', $dateAssigned);
-	}
+    /**
+     * Set the reviewer's confirmed date.
+     *
+     * @param string $dateConfirmed
+     */
+    public function setDateConfirmed($dateConfirmed)
+    {
+        $this->setData('dateConfirmed', $dateConfirmed);
+    }
 
-	/**
-	 * Get the reviewer's notified date.
-	 * @return string
-	 */
-	function getDateNotified() {
-		return $this->getData('dateNotified');
-	}
+    /**
+     * Get the reviewer's completed date.
+     *
+     * @return string
+     */
+    public function getDateCompleted()
+    {
+        return $this->getData('dateCompleted');
+    }
 
-	/**
-	 * Set the reviewer's notified date.
-	 * @param $dateNotified string
-	 */
-	function setDateNotified($dateNotified) {
-		return $this->setData('dateNotified', $dateNotified);
-	}
+    /**
+     * Set the reviewer's completed date.
+     *
+     * @param string $dateCompleted
+     */
+    public function setDateCompleted($dateCompleted)
+    {
+        $this->setData('dateCompleted', $dateCompleted);
+    }
 
-	/**
-	 * Get the reviewer's confirmed date.
-	 * @return string
-	 */
-	function getDateConfirmed() {
-		return $this->getData('dateConfirmed');
-	}
+    /**
+     * Get the reviewer's acknowledged date.
+     *
+     * @return string
+     */
+    public function getDateAcknowledged()
+    {
+        return $this->getData('dateAcknowledged');
+    }
 
-	/**
-	 * Set the reviewer's confirmed date.
-	 * @param $dateConfirmed string
-	 */
-	function setDateConfirmed($dateConfirmed) {
-		return $this->setData('dateConfirmed', $dateConfirmed);
-	}
+    /**
+     * Set the reviewer's acknowledged date.
+     *
+     * @param string $dateAcknowledged
+     */
+    public function setDateAcknowledged($dateAcknowledged)
+    {
+        $this->setData('dateAcknowledged', $dateAcknowledged);
+    }
 
-	/**
-	 * Get the reviewer's completed date.
-	 * @return string
-	 */
-	function getDateCompleted() {
-		return $this->getData('dateCompleted');
-	}
+    /**
+     * Get the reviewer's due date.
+     *
+     * @return string
+     */
+    public function getDateDue()
+    {
+        return $this->getData('dateDue');
+    }
 
-	/**
-	 * Set the reviewer's completed date.
-	 * @param $dateCompleted string
-	 */
-	function setDateCompleted($dateCompleted) {
-		return $this->setData('dateCompleted', $dateCompleted);
-	}
+    /**
+     * Set the reviewer's due date.
+     *
+     * @param string $dateDue
+     */
+    public function setDateDue($dateDue)
+    {
+        $this->setData('dateDue', $dateDue);
+    }
 
-	/**
-	 * Get the reviewer's acknowledged date.
-	 * @return string
-	 */
-	function getDateAcknowledged() {
-		return $this->getData('dateAcknowledged');
-	}
+    /**
+     * Get the reviewer's response due date.
+     *
+     * @return string
+     */
+    public function getDateResponseDue()
+    {
+        return $this->getData('dateResponseDue');
+    }
 
-	/**
-	 * Set the reviewer's acknowledged date.
-	 * @param $dateAcknowledged string
-	 */
-	function setDateAcknowledged($dateAcknowledged) {
-		return $this->setData('dateAcknowledged', $dateAcknowledged);
-	}
+    /**
+     * Set the reviewer's response due date.
+     *
+     * @param string $dateResponseDue
+     */
+    public function setDateResponseDue($dateResponseDue)
+    {
+        $this->setData('dateResponseDue', $dateResponseDue);
+    }
 
-	/**
-	 * Get the reviewer's due date.
-	 * @return string
-	 */
-	function getDateDue() {
-		return $this->getData('dateDue');
-	}
+    /**
+     * Get the declined value.
+     *
+     * @return bool
+     */
+    public function getDeclined()
+    {
+        return $this->getData('declined');
+    }
 
-	/**
-	 * Set the reviewer's due date.
-	 * @param $dateDue string
-	 */
-	function setDateDue($dateDue) {
-		return $this->setData('dateDue', $dateDue);
-	}
+    /**
+     * Set the reviewer's declined value.
+     *
+     * @param bool $declined
+     */
+    public function setDeclined($declined)
+    {
+        $this->setData('declined', $declined);
+    }
 
-	/**
-	 * Get the reviewer's response due date.
-	 * @return string
-	 */
-	function getDateResponseDue() {
-		return $this->getData('dateResponseDue');
-	}
+    /**
+     * Get the cancelled value.
+     *
+     * @return bool
+     */
+    public function getCancelled()
+    {
+        return $this->getData('cancelled');
+    }
 
-	/**
-	 * Set the reviewer's response due date.
-	 * @param $dateResponseDue string
-	 */
-	function setDateResponseDue($dateResponseDue) {
-		return $this->setData('dateResponseDue', $dateResponseDue);
-	}
+    /**
+     * Set the reviewer's cancelled value.
+     *
+     * @param bool $cancelled
+     */
+    public function setCancelled($cancelled)
+    {
+        $this->setData('cancelled', $cancelled);
+    }
 
-	/**
-	 * Get the declined value.
-	 * @return boolean
-	 */
-	function getDeclined() {
-		return $this->getData('declined');
-	}
+    /**
+     * Get quality.
+     *
+     * @return int|null
+     */
+    public function getQuality()
+    {
+        return $this->getData('quality');
+    }
 
-	/**
-	 * Set the reviewer's declined value.
-	 * @param $declined boolean
-	 */
-	function setDeclined($declined) {
-		return $this->setData('declined', $declined);
-	}
+    /**
+     * Set quality.
+     *
+     * @param int|null $quality
+     */
+    public function setQuality($quality)
+    {
+        $this->setData('quality', $quality);
+    }
 
-	/**
-	 * Get quality.
-	 * @return int
-	 */
-	function getQuality() {
-		return $this->getData('quality');
-	}
+    /**
+     * Get stageId.
+     *
+     * @return int
+     */
+    public function getStageId()
+    {
+        return $this->getData('stageId');
+    }
 
-	/**
-	 * Set quality.
-	 * @param $quality int
-	 */
-	function setQuality($quality) {
-		return $this->setData('quality', $quality);
-	}
+    /**
+     * Set stageId.
+     *
+     * @param int $stageId
+     */
+    public function setStageId($stageId)
+    {
+        $this->setData('stageId', $stageId);
+    }
 
-	/**
-	 * Get stageId.
-	 * @return int
-	 */
-	function getStageId() {
-		return $this->getData('stageId');
-	}
+    /**
+     * Get the method of the review (open, anonymous, or double-anonymous).
+     *
+     * @return int
+     */
+    public function getReviewMethod()
+    {
+        return $this->getData('reviewMethod');
+    }
 
-	/**
-	 * Set stageId.
-	 * @param $stageId int
-	 */
-	function setStageId($stageId) {
-		return $this->setData('stageId', $stageId);
-	}
+    /**
+     * Set the type of review.
+     *
+     * @param int $method
+     */
+    public function setReviewMethod($method)
+    {
+        $this->setData('reviewMethod', $method);
+    }
 
-	/**
-	 * Get the method of the review (open, blind, or double-blind).
-	 * @return int
-	 */
-	function getReviewMethod() {
-		return $this->getData('reviewMethod');
-	}
+    /**
+     * Get round.
+     *
+     * @return int
+     */
+    public function getRound()
+    {
+        return $this->getData('round');
+    }
 
-	/**
-	 * Set the type of review.
-	 * @param $method int
-	 */
-	function setReviewMethod($method) {
-		return $this->setData('reviewMethod', $method);
-	}
+    /**
+     * Set round.
+     *
+     * @param int $round
+     */
+    public function setRound($round)
+    {
+        $this->setData('round', $round);
+    }
 
-	/**
-	 * Get round.
-	 * @return int
-	 */
-	function getRound() {
-		return $this->getData('round');
-	}
+    /**
+     * Get step.
+     *
+     * @return int
+     */
+    public function getStep()
+    {
+        return $this->getData('step');
+    }
 
-	/**
-	 * Set round.
-	 * @param $round int
-	 */
-	function setRound($round) {
-		return $this->setData('round', $round);
-	}
-
-	/**
-	 * Get step.
-	 * @return int
-	 */
-	function getStep() {
-		return $this->getData('step');
-	}
-
-	/**
-	 * Set status.
-	 * @param $status int
-	 */
-	function setStep($step) {
-		return $this->setData('step', $step);
-	}
-
-	//
-	// Comments
-	//
-
-	/**
-	 * Get most recent peer review comment.
-	 * @return SubmissionComment
-	 */
-	function getMostRecentPeerReviewComment() {
-		return $this->getData('peerReviewComment');
-	}
-
-	/**
-	 * Set most recent peer review comment.
-	 * @param $peerReviewComment SubmissionComment
-	 */
-	function setMostRecentPeerReviewComment($peerReviewComment) {
-		return $this->setData('peerReviewComment', $peerReviewComment);
-	}
+    /**
+     * Set status.
+     */
+    public function setStep($step)
+    {
+        $this->setData('step', $step);
+    }
 }
 
-?>
+if (!PKP_STRICT_MODE) {
+    class_alias('\APP\submission\reviewer\ReviewerSubmission', '\ReviewerSubmission');
+}

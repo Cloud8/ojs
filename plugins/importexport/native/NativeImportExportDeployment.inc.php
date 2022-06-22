@@ -3,9 +3,9 @@
 /**
  * @file plugins/importexport/native/NativeImportExportDeployment.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2000-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2000-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class NativeImportExportDeployment
  * @ingroup plugins_importexport_native
@@ -16,104 +16,83 @@
 
 import('lib.pkp.plugins.importexport.native.PKPNativeImportExportDeployment');
 
-class NativeImportExportDeployment extends PKPNativeImportExportDeployment {
+class NativeImportExportDeployment extends PKPNativeImportExportDeployment
+{
+    public $_issue;
 
-	var $_issue;
 
-	/**
-	 * Constructor
-	 * @param $context Context
-	 * @param $user User
-	 */
-	function __construct($context, $user) {
-		parent::__construct($context, $user);
-	}
+    //
+    // Deploymenturation items for subclasses to override
+    //
+    /**
+     * Get the submission node name
+     *
+     * @return string
+     */
+    public function getSubmissionNodeName()
+    {
+        return 'article';
+    }
 
-	//
-	// Deploymenturation items for subclasses to override
-	//
-	/**
-	 * Get the submission node name
-	 * @return string
-	 */
-	function getSubmissionNodeName() {
-		return 'article';
-	}
+    /**
+     * Get the submissions node name
+     *
+     * @return string
+     */
+    public function getSubmissionsNodeName()
+    {
+        return 'articles';
+    }
 
-	/**
-	 * Get the submissions node name
-	 * @return string
-	 */
-	function getSubmissionsNodeName() {
-		return 'articles';
-	}
+    /**
+     * Get the representation node name
+     */
+    public function getRepresentationNodeName()
+    {
+        return 'article_galley';
+    }
 
-	/**
-	 * Get the representation node name
-	 */
-	function getRepresentationNodeName() {
-		return 'article_galley';
-	}
+    /**
+     * Get the schema filename.
+     *
+     * @return string
+     */
+    public function getSchemaFilename()
+    {
+        return 'native.xsd';
+    }
 
-	/**
-	 * Get the schema filename.
-	 * @return string
-	 */
-	function getSchemaFilename() {
-		return 'native.xsd';
-	}
+    /**
+     * Set the import/export issue.
+     *
+     * @param Issue $issue
+     */
+    public function setIssue($issue)
+    {
+        $this->_issue = $issue;
+    }
 
-	/**
-	 * Set the import/export issue.
-	 * @param $issue Issue
-	 */
-	function setIssue($issue) {
-		$this->_issue = $issue;
-	}
+    /**
+     * Get the import/export issue.
+     *
+     * @return Issue
+     */
+    public function getIssue()
+    {
+        return $this->_issue;
+    }
 
-	/**
-	 * Get the import/export issue.
-	 * @return Issue
-	 */
-	function getIssue() {
-		return $this->_issue;
-	}
-
-	/**
-	 * Remove the processed objects.
-	 * @param $assocType integer ASSOC_TYPE_...
-	 */
-	function removeImportedObjects($assocType) {
-		switch ($assocType) {
-			case ASSOC_TYPE_ISSUE:
-				$processedIssuesIds = $this->getProcessedObjectsIds(ASSOC_TYPE_ISSUE);
-				if (!empty($processedIssuesIds)) {
-					$issueDao = DAORegistry::getDAO('IssueDAO');
-					foreach ($processedIssuesIds as $issueId) {
-						if ($issueId) {
-							$issue = $issueDao->getById($issueId);
-							$issueDao->deleteObject($issue);
-						}
-					}
-				}
-				break;
-			case ASSOC_TYPE_SECTION:
-				$processedSectionIds = $this->getProcessedObjectsIds(ASSOC_TYPE_SECTION);
-				if (!empty($processedSectionIds)) {
-					$sectionDao = DAORegistry::getDAO('SectionDAO');
-					foreach ($processedSectionIds as $sectionId) {
-						if ($sectionId) {
-							$section = $sectionDao->getById($sectionId);
-							$sectionDao->deleteObject($section);
-						}
-					}
-				}
-				break;
-			default:
-				parent::removeImportedObjects($assocType);
-		}
-	}
-
+    /**
+     * @see PKPNativeImportExportDeployment::getObjectTypes()
+     */
+    protected function getObjectTypes()
+    {
+        return parent::getObjectTypes() + [
+            ASSOC_TYPE_JOURNAL => __('context.context'),
+            ASSOC_TYPE_SECTION => __('section.section'),
+            ASSOC_TYPE_ISSUE => __('issue.issue'),
+            ASSOC_TYPE_ISSUE_GALLEY => __('editor.issues.galley'),
+            ASSOC_TYPE_PUBLICATION => __('common.publication'),
+        ];
+    }
 }
-
-?>

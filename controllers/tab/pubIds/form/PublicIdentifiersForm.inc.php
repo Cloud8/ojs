@@ -3,9 +3,9 @@
 /**
  * @file controllers/tab/pubIds/form/PublicIdentifiersForm.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class PublicIdentifiersForm
  * @ingroup controllers_tab_pubIds_form
@@ -15,56 +15,68 @@
 
 import('lib.pkp.controllers.tab.pubIds.form.PKPPublicIdentifiersForm');
 
-class PublicIdentifiersForm extends PKPPublicIdentifiersForm {
+use APP\facades\Repo;
+use APP\issue\Issue;
+use APP\issue\IssueGalley;
+use APP\template\TemplateManager;
+use PKP\galley\Galley;
 
-	/**
-	 * Constructor.
-	 * @param $pubObject object
-	 * @param $stageId integer
-	 * @param $formParams array
-	 */
-	function __construct($pubObject, $stageId = null, $formParams = null) {
-		parent::__construct($pubObject, $stageId, $formParams);
-	}
+class PublicIdentifiersForm extends PKPPublicIdentifiersForm
+{
+    /**
+     * @copydoc Form::fetch()
+     *
+     * @param null|mixed $template
+     */
+    public function fetch($request, $template = null, $display = false)
+    {
+        $templateMgr = TemplateManager::getManager($request);
+        $enablePublisherId = (array) $request->getContext()->getData('enablePublisherId');
+        $templateMgr->assign([
+            'enablePublisherId' => ($this->getPubObject() instanceof Galley && in_array('galley', $enablePublisherId)) ||
+                    ($this->getPubObject() instanceof Issue && in_array('issue', $enablePublisherId)) ||
+                    ($this->getPubObject() instanceof IssueGalley && in_array('issueGalley', $enablePublisherId)),
+        ]);
 
-	/**
-	 * Store objects with pub ids.
-	 * @param $request PKPRequest
-	 */
-	function execute($request) {
-		parent::execute($request);
-		$pubObject = $this->getPubObject();
-		if (is_a($pubObject, 'Issue')) {
-			$issueDao = DAORegistry::getDAO('IssueDAO');
-			$issueDao->updateObject($pubObject);
-		}
-	}
+        return parent::fetch($request, $template, $display);
+    }
 
-	/**
-	 * Clear issue objects pub ids.
-	 * @param $pubIdPlugInClassName string
-	 */
-	function clearIssueObjectsPubIds($pubIdPlugInClassName) {
-		$pubIdPlugins = PluginRegistry::loadCategory('pubIds', true);
-		if (is_array($pubIdPlugins)) {
-			foreach ($pubIdPlugins as $pubIdPlugin) {
-				if (get_class($pubIdPlugin) == $pubIdPlugInClassName) {
-					$pubIdPlugin->clearIssueObjectsPubIds($this->getPubObject());
-				}
-			}
-		}
-	}
+    /**
+     * @copydoc Form::execute()
+     */
+    public function execute(...$functionArgs)
+    {
+        parent::execute(...$functionArgs);
+        $pubObject = $this->getPubObject();
+        if ($pubObject instanceof Issue) {
+            Repo::issue()->edit($pubObject, []);
+        }
+    }
 
-	/**
-	 * @copydoc PKPPublicIdentifiersForm::execute()
-	 */
-	function getAssocType($pubObject) {
-		if (is_a($pubObject, 'Issue')) {
-			return ASSOC_TYPE_ISSUE;
-		}
-		return parent::getAssocType($pubObject);
-	}
+    /**
+     * Clear issue objects pub ids.
+     *
+     * @param string $pubIdPlugInClassName
+     */
+    public function clearIssueObjectsPubIds($pubIdPlugInClassName)
+    {
+        $pubIdPlugins = PluginRegistry::loadCategory('pubIds', true);
+        foreach ($pubIdPlugins as $pubIdPlugin) {
+            $classNameParts = explode('\\', get_class($pubIdPlugin)); // Separate namespace info from class name
+            if (end($classNameParts) == $pubIdPlugInClassName) {
+                $pubIdPlugin->clearIssueObjectsPubIds($this->getPubObject());
+            }
+        }
+    }
 
+    /**
+     * @copydoc PKPPublicIdentifiersForm::getAssocType()
+     */
+    public function getAssocType($pubObject)
+    {
+        if ($pubObject instanceof Issue) {
+            return ASSOC_TYPE_ISSUE;
+        }
+        return parent::getAssocType($pubObject);
+    }
 }
-
-?>

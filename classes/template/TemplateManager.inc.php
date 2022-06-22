@@ -3,9 +3,9 @@
 /**
  * @file classes/template/TemplateManager.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class TemplateManager
  * @ingroup template
@@ -15,131 +15,148 @@
  *
  */
 
-import('classes.search.ArticleSearch');
-import('classes.file.PublicFileManager');
-import('lib.pkp.classes.template.PKPTemplateManager');
+namespace APP\template;
 
-class TemplateManager extends PKPTemplateManager {
-	/**
-	 * Constructor.
-	 * Initialize template engine and assign basic template variables.
-	 * @param $request PKPRequest
-	 */
-	function __construct($request) {
-		parent::__construct($request);
+use APP\core\Application;
+use APP\file\PublicFileManager;
+use PKP\security\Role;
+use PKP\session\SessionManager;
+use PKP\template\PKPTemplateManager;
 
-		if (!defined('SESSION_DISABLE_INIT')) {
-			/**
-			 * Kludge to make sure no code that tries to connect to
-			 * the database is executed (e.g., when loading
-			 * installer pages).
-			 */
+class TemplateManager extends PKPTemplateManager
+{
+    /**
+     * Initialize template engine and assign basic template variables.
+     *
+     * @param PKPRequest $request
+     */
+    public function initialize($request)
+    {
+        parent::initialize($request);
 
-			$context = $request->getContext();
-			$site = $request->getSite();
+        // Pass app-specific details to template
+        $this->assign([
+            'brandImage' => 'templates/images/ojs_brand.png',
+        ]);
 
-			$publicFileManager = new PublicFileManager();
-			$siteFilesDir = $request->getBaseUrl() . '/' . $publicFileManager->getSiteFilesPath();
-			$this->assign('sitePublicFilesDir', $siteFilesDir);
-			$this->assign('publicFilesDir', $siteFilesDir); // May be overridden by journal
+        if (!SessionManager::isDisabled()) {
+            /**
+             * Kludge to make sure no code that tries to connect to
+             * the database is executed (e.g., when loading
+             * installer pages).
+             */
 
-			$siteStyleFilename = $publicFileManager->getSiteFilesPath() . '/' . $site->getSiteStyleFilename();
-			if (file_exists($siteStyleFilename)) {
-				$this->addStyleSheet(
-					'siteStylesheet',
-					$request->getBaseUrl() . '/' . $siteStyleFilename,
-					array(
-						'priority' => STYLE_SEQUENCE_LATE
-					)
-				);
-			}
+            $context = $request->getContext();
+            $site = $request->getSite();
 
-			// Pass app-specific details to template
-			$this->assign(array(
-				'brandImage' => 'templates/images/ojs_brand.png',
-				'packageKey' => 'common.openJournalSystems',
-				'pkpLink'    => 'http://pkp.sfu.ca/ojs',
-			));
+            $publicFileManager = new PublicFileManager();
+            $siteFilesDir = $request->getBaseUrl() . '/' . $publicFileManager->getSiteFilesPath();
+            $this->assign('sitePublicFilesDir', $siteFilesDir);
+            $this->assign('publicFilesDir', $siteFilesDir); // May be overridden by journal
 
-			// Get a count of unread tasks.
-			if ($user = $request->getUser()) {
-				$notificationDao = DAORegistry::getDAO('NotificationDAO');
-				// Exclude certain tasks, defined in the notifications grid handler
-				import('lib.pkp.controllers.grid.notifications.TaskNotificationsGridHandler');
-				$this->assign('unreadNotificationCount', $notificationDao->getNotificationCount(false, $user->getId(), null, NOTIFICATION_LEVEL_TASK));
-			}
-			if (isset($context)) {
+            if ($site->getData('styleSheet')) {
+                $this->addStyleSheet(
+                    'siteStylesheet',
+                    $request->getBaseUrl() . '/' . $publicFileManager->getSiteFilesPath() . '/' . $site->getData('styleSheet')['uploadName'],
+                    ['priority' => self::STYLE_SEQUENCE_LATE]
+                );
+            }
+            if (isset($context)) {
+                $this->assign([
+                    'currentJournal' => $context,
+                    'siteTitle' => $context->getLocalizedName(),
+                    'publicFilesDir' => $request->getBaseUrl() . '/' . $publicFileManager->getContextFilesPath($context->getId()),
+                    'primaryLocale' => $context->getPrimaryLocale(),
+                    'supportedLocales' => $context->getSupportedLocaleNames(),
+                    'numPageLinks' => $context->getData('numPageLinks'),
+                    'itemsPerPage' => $context->getData('itemsPerPage'),
+                    'enableAnnouncements' => $context->getData('enableAnnouncements'),
+                    'disableUserReg' => $context->getData('disableUserReg'),
+                    'pageFooter' => $context->getLocalizedData('pageFooter'),
+                ]);
+            } else {
+                // Check if registration is open for any contexts
+                $contextDao = Application::getContextDAO();
+                $contexts = $contextDao->getAll(true)->toArray();
+                $contextsForRegistration = [];
+                foreach ($contexts as $context) {
+                    if (!$context->getData('disableUserReg')) {
+                        $contextsForRegistration[] = $context;
+                    }
+                }
 
-				$this->assign(array(
-					'currentJournal' => $context,
-					'siteTitle' => $context->getLocalizedName(),
-					'publicFilesDir' => $request->getBaseUrl() . '/' . $publicFileManager->getJournalFilesPath($context->getId()),
-					'primaryLocale' => $context->getPrimaryLocale(),
-					'supportedLocales' => $context->getSupportedLocaleNames(),
-					'displayPageHeaderTitle' => $context->getLocalizedPageHeaderTitle(),
-					'displayPageHeaderLogo' => $context->getLocalizedPageHeaderLogo(),
-					'displayPageHeaderLogoAltText' => $context->getLocalizedSetting('pageHeaderLogoImageAltText'),
-					'numPageLinks' => $context->getSetting('numPageLinks'),
-					'itemsPerPage' => $context->getSetting('itemsPerPage'),
-					'enableAnnouncements' => $context->getSetting('enableAnnouncements'),
-					'contextSettings' => $context->getSettingsDAO()->getSettings($context->getId()),
-					'disableUserReg' => $context->getSetting('disableUserReg'),
-				));
+                $this->assign([
+                    'contexts' => $contextsForRegistration,
+                    'disableUserReg' => empty($contextsForRegistration),
+                    'siteTitle' => $site->getLocalizedTitle(),
+                    'primaryLocale' => $site->getPrimaryLocale(),
+                    'supportedLocales' => $site->getSupportedLocaleNames(),
+                    'pageFooter' => $site->getLocalizedData('pageFooter'),
+                ]);
+            }
+        }
+    }
 
-				// Assign meta tags
-				$favicon = $context->getLocalizedFavicon();
-				if (!empty($favicon)) {
-					$faviconDir = $request->getBaseUrl() . '/' . $publicFileManager->getJournalFilesPath($context->getId());
-					$this->addHeader('favicon', '<link rel="icon" href="' . $faviconDir . '/' . $favicon['uploadName'] . '">');
-				}
+    /**
+     * @copydoc PKPTemplateManager::setupBackendPage()
+     */
+    public function setupBackendPage()
+    {
+        parent::setupBackendPage();
 
-				// Assign stylesheets and footer
-				$contextStyleSheet = $context->getSetting('styleSheet');
-				if ($contextStyleSheet) {
-					$this->addStyleSheet(
-						'contextStylesheet',
-						$request->getBaseUrl() . '/' . $publicFileManager->getJournalFilesPath($context->getId()) . '/' . $contextStyleSheet['uploadName'],
-						array(
-							'priority' => STYLE_SEQUENCE_LATE
-						)
-					);
-				}
+        $request = Application::get()->getRequest();
+        if (SessionManager::isDisabled()
+                || !$request->getContext()
+                || !$request->getUser()) {
+            return;
+        }
 
-				// Get a link to the settings page for the current context.
-				// This allows us to reduce template duplication by using this
-				// variable in templates/common/header.tpl, instead of
-				// reproducing a lot of OMP/OJS-specific logic there.
-				$dispatcher = $request->getDispatcher();
-				$this->assign( 'contextSettingsUrl', $dispatcher->url($request, ROUTE_PAGE, null, 'management', 'settings', 'context') );
+        $router = $request->getRouter();
+        $handler = $router->getHandler();
+        $userRoles = (array) $handler->getAuthorizedContextObject(ASSOC_TYPE_USER_ROLES);
 
-				import('classes.payment.ojs.OJSPaymentManager');
-				$paymentManager = new OJSPaymentManager($request);
-				$this->assign('pageFooter', $context->getLocalizedSetting('pageFooter'));
-			} else {
-				// Check if registration is open for any contexts
-				$contextDao = Application::getContextDAO();
-				$contexts = $contextDao->getAll(true)->toArray();
-				$contextsForRegistration = array();
-				foreach($contexts as $context) {
-					if (!$context->getSetting('disableUserReg')) {
-						$contextsForRegistration[] = $context;
-					}
-				}
+        $menu = (array) $this->getState('menu');
 
-				$this->assign(array(
-					'contexts' => $contextsForRegistration,
-					'disableUserReg' => empty($contextsForRegistration),
-					'displayPageHeaderTitle' => $site->getLocalizedPageHeaderTitle(),
-					'displayPageHeaderLogo' => $site->getLocalizedSetting('pageHeaderTitleImage'),
-					'siteTitle' => $site->getLocalizedTitle(),
-					'primaryLocale' => $site->getPrimaryLocale(),
-					'supportedLocales' => $site->getSupportedLocaleNames(),
-					'pageFooter' => $site->getLocalizedSetting('pageFooter'),
-				));
+        // Add issues after submissions items
+        if (count(array_intersect([Role::ROLE_ID_MANAGER, Role::ROLE_ID_SITE_ADMIN], $userRoles))) {
+            $issuesLink = [
+                'name' => __('editor.navigation.issues'),
+                'url' => $router->url($request, null, 'manageIssues'),
+                'isCurrent' => $request->getRequestedPage() === 'manageIssues',
+            ];
 
-			}
-		}
-	}
+            $index = array_search('submissions', array_keys($menu));
+            if ($index === false || count($menu) <= $index + 1) {
+                $menu['issues'] = $issuesLink;
+            } else {
+                $menu = array_slice($menu, 0, $index + 1, true)
+                    + ['issues' => $issuesLink]
+                    + array_slice($menu, $index + 1, null, true);
+            }
+        }
+
+        // Add payments link before settings
+        if ($request->getContext()->getData('paymentsEnabled') && array_intersect([Role::ROLE_ID_SITE_ADMIN, Role::ROLE_ID_MANAGER, Role::ROLE_ID_SUBSCRIPTION_MANAGER], $userRoles)) {
+            $paymentsLink = [
+                'name' => __('common.payments'),
+                'url' => $router->url($request, null, 'payments'),
+                'isCurrent' => $request->getRequestedPage() === 'payments',
+            ];
+
+            $index = array_search('settings', array_keys($menu));
+            if ($index === false || count($menu) === $index) {
+                $menu['payments'] = $paymentsLink;
+            } else {
+                $menu = array_slice($menu, 0, $index, true) +
+                        ['payments' => $paymentsLink] +
+                        array_slice($menu, $index, null, true);
+            }
+        }
+
+        $this->setState(['menu' => $menu]);
+    }
 }
 
-?>
+if (!PKP_STRICT_MODE) {
+    class_alias('\APP\template\TemplateManager', '\TemplateManager');
+}

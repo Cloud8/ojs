@@ -3,13 +3,13 @@
 /**
  * @defgroup pages_payment Payment Pages
  */
- 
+
 /**
  * @file pages/payment/index.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @ingroup pages_payment
  * @brief Handle requests for interactions between the payment system and external
@@ -17,10 +17,9 @@
  */
 
 switch ($op) {
-	case 'plugin':
-		define('HANDLER_CLASS', 'PaymentHandler');
-		import('pages.payment.PaymentHandler');
-		break;
+    case 'plugin':
+    case 'pay':
+        define('HANDLER_CLASS', 'PaymentHandler');
+        import('pages.payment.PaymentHandler');
+        break;
 }
-
-?>

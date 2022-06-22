@@ -1,9 +1,9 @@
 {**
  * plugins/generic/recommendByAuthor/templates/articleFooter.tpl
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * A template to be included via Templates::Article::Footer::PageFooter hook.
  *}
@@ -17,15 +17,15 @@
 
 			<ul>
 				{iterate from=articlesBySameAuthor item=articleBySameAuthor}
-					{assign var=publishedArticle value=$articleBySameAuthor.publishedArticle}
+					{assign var=submission value=$articleBySameAuthor.publishedSubmission}
 					{assign var=article value=$articleBySameAuthor.article}
 					{assign var=issue value=$articleBySameAuthor.issue}
 					{assign var=journal value=$articleBySameAuthor.journal}
 					<li>
-						{foreach from=$article->getAuthors() item=author}
+						{foreach from=$article->getCurrentPublication()->getData('authors') item=author}
 							{$author->getFullName()|escape},
 						{/foreach}
-						<a href="{url journal=$journal->getPath() page="article" op="view" path=$publishedArticle->getBestArticleId()}">
+						<a href="{url journal=$journal->getPath() page="article" op="view" path=$submission->getBestId()}">
 							{$article->getLocalizedTitle()|strip_unsafe_html}
 						</a>,
 						<a href="{url journal=$journal->getPath() page="issue" op="view" path=$issue->getBestIssueId()}">

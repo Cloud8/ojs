@@ -3,9 +3,9 @@
 /**
  * @file classes/subscription/SubscriptionAction.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class SubscriptionAction
  * @ingroup subscriptions
@@ -13,81 +13,89 @@
  * Common actions for subscription management functions.
  */
 
-class SubscriptionAction {
-	/**
-	 * Send notification email to Subscription Manager when online payment is completed.
-	 * @param $request PKPRequest
-	 * @param $subscription Subscription
-	 * @param $mailTemplateKey string
-	 */
-	function sendOnlinePaymentNotificationEmail($request, $subscription, $mailTemplateKey) {
-		$validKeys = array(
-			'SUBSCRIPTION_PURCHASE_INDL',
-			'SUBSCRIPTION_PURCHASE_INSTL',
-			'SUBSCRIPTION_RENEW_INDL',
-			'SUBSCRIPTION_RENEW_INSTL'
-		);
+namespace APP\subscription;
 
-		if (!in_array($mailTemplateKey, $validKeys)) return false;
+use APP\facades\Repo;
+use APP\notification\NotificationManager;
+use PKP\db\DAORegistry;
+use PKP\mail\MailTemplate;
+use PKP\notification\PKPNotification;
 
-		$journal = $request->getJournal();
+class SubscriptionAction
+{
+    /**
+     * Send notification email to Subscription Manager when online payment is completed.
+     *
+     * @param PKPRequest $request
+     * @param Subscription $subscription
+     * @param string $mailTemplateKey
+     */
+    public function sendOnlinePaymentNotificationEmail($request, $subscription, $mailTemplateKey)
+    {
+        $validKeys = [
+            'SUBSCRIPTION_PURCHASE_INDL',
+            'SUBSCRIPTION_PURCHASE_INSTL',
+            'SUBSCRIPTION_RENEW_INDL',
+            'SUBSCRIPTION_RENEW_INSTL'
+        ];
 
-		$subscriptionContactName = $journal->getSetting('subscriptionName');
-		$subscriptionContactEmail = $journal->getSetting('subscriptionEmail');
+        if (!in_array($mailTemplateKey, $validKeys)) {
+            return false;
+        }
 
-		if (empty($subscriptionContactEmail)) {
-			$subscriptionContactEmail = $journal->getSetting('contactEmail');
-			$subscriptionContactName = $journal->getSetting('contactName');
-		}
+        $journal = $request->getJournal();
 
-		if (empty($subscriptionContactEmail)) return false;
+        $subscriptionContactName = $journal->getData('subscriptionName');
+        $subscriptionContactEmail = $journal->getData('subscriptionEmail');
 
-		$userDao = DAORegistry::getDAO('UserDAO');
-		$user = $userDao->getById($subscription->getUserId());
+        if (empty($subscriptionContactEmail)) {
+            $subscriptionContactEmail = $journal->getData('contactEmail');
+            $subscriptionContactName = $journal->getData('contactName');
+        }
 
-		$subscriptionTypeDao = DAORegistry::getDAO('SubscriptionTypeDAO');
-		$subscriptionType = $subscriptionTypeDao->getById($subscription->getTypeId(), $journal->getId());
+        if (empty($subscriptionContactEmail)) {
+            return false;
+        }
 
-		$roleDao = DAORegistry::getDAO('RoleDAO');
-		$role = $roleDao->newDataObject();
-		if ($roleDao->getJournalUsersRoleCount($journal->getId(), ROLE_ID_SUBSCRIPTION_MANAGER) > 0) {
-			$role->setId(ROLE_ID_SUBSCRIPTION_MANAGER);
-			$rolePath = $role->getPath();
-		} else {
-			$role->setId(ROLE_ID_MANAGER);
-			$rolePath = $role->getPath();
-		}
+        $user = Repo::user()->get($subscription->getUserId());
 
-		$paramArray = array(
-			'subscriptionType' => $subscriptionType->getSummaryString(),
-			'userDetails' => $user->getContactSignature(),
-			'membership' => $subscription->getMembership()
-		);
+        $subscriptionTypeDao = DAORegistry::getDAO('SubscriptionTypeDAO'); /** @var SubscriptionTypeDAO $subscriptionTypeDao */
+        $subscriptionType = $subscriptionTypeDao->getById($subscription->getTypeId(), $journal->getId());
 
-		switch($mailTemplateKey) {
-			case 'SUBSCRIPTION_PURCHASE_INDL':
-			case 'SUBSCRIPTION_RENEW_INDL':
-				$paramArray['subscriptionUrl'] = $request->url($journal->getPath(), $rolePath, 'editSubscription', 'individual', array($subscription->getId()));
-				break;
-			case 'SUBSCRIPTION_PURCHASE_INSTL':
-			case 'SUBSCRIPTION_RENEW_INSTL':
-				$paramArray['subscriptionUrl'] = $request->url($journal->getPath(), $rolePath, 'editSubscription', 'institutional', array($subscription->getId()));
-				$paramArray['institutionName'] = $subscription->getInstitutionName();
-				$paramArray['institutionMailingAddress'] = $subscription->getInstitutionMailingAddress();
-				$paramArray['domain'] = $subscription->getDomain();
-				$paramArray['ipRanges'] = $subscription->getIPRangesString();
-				break;
-		}
+        $paramArray = [
+            'subscriptionType' => $subscriptionType->getSummaryString(),
+            'subscriberDetails' => $user->getSignature() ?? '',
+            'membership' => $subscription->getMembership()
+        ];
 
-		import('lib.pkp.classes.mail.MailTemplate');
-		$mail = new MailTemplate($mailTemplateKey);
-		$mail->setReplyTo($subscriptionContactEmail, $subscriptionContactName);
-		$mail->addRecipient($subscriptionContactEmail, $subscriptionContactName);
-		$mail->setSubject($mail->getSubject($journal->getPrimaryLocale()));
-		$mail->setBody($mail->getBody($journal->getPrimaryLocale()));
-		$mail->assignParams($paramArray);
-		$mail->send();
-	}
+        switch ($mailTemplateKey) {
+            case 'SUBSCRIPTION_PURCHASE_INDL':
+            case 'SUBSCRIPTION_RENEW_INDL':
+                $paramArray['subscriptionUrl'] = $request->url($journal->getPath(), 'payments', null, null, null, 'individual');
+                break;
+            case 'SUBSCRIPTION_PURCHASE_INSTL':
+            case 'SUBSCRIPTION_RENEW_INSTL':
+                $paramArray['subscriptionUrl'] = $request->url($journal->getPath(), 'payments', null, null, null, 'institutional');
+                $paramArray['institutionName'] = $subscription->getInstitutionName();
+                $paramArray['institutionMailingAddress'] = $subscription->getInstitutionMailingAddress();
+                $paramArray['domain'] = $subscription->getDomain();
+                $paramArray['ipRanges'] = $subscription->getIPRangesString();
+                break;
+        }
+
+        $mail = new MailTemplate($mailTemplateKey);
+        $mail->setReplyTo($subscriptionContactEmail, $subscriptionContactName);
+        $mail->addRecipient($subscriptionContactEmail, $subscriptionContactName);
+        $mail->setSubject($mail->getSubject($journal->getPrimaryLocale()));
+        $mail->setBody($mail->getBody($journal->getPrimaryLocale()));
+        $mail->assignParams($paramArray);
+        if (!$mail->send()) {
+            $notificationMgr = new NotificationManager();
+            $notificationMgr->createTrivialNotification($request->getUser()->getId(), PKPNotification::NOTIFICATION_TYPE_ERROR, ['contents' => __('email.compose.error')]);
+        }
+    }
 }
 
-?>
+if (!PKP_STRICT_MODE) {
+    class_alias('\APP\subscription\SubscriptionAction', '\SubscriptionAction');
+}

@@ -3,9 +3,9 @@
 /**
  * @file classes/subscription/form/SubscriptionForm.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class SubscriptionForm
  * @ingroup subscription
@@ -13,204 +13,264 @@
  * @brief Base form class for subscription create/edits.
  */
 
-import('lib.pkp.classes.form.Form');
+namespace APP\subscription\form;
 
-class SubscriptionForm extends Form {
+use APP\core\Application;
+use APP\facades\Repo;
+use APP\subscription\Subscription;
+use APP\subscription\SubscriptionDAO;
+use APP\template\TemplateManager;
+use PKP\db\DAORegistry;
+use PKP\facades\Locale;
+use PKP\form\Form;
+use PKP\mail\MailTemplate;
 
-	/** @var Subscription the subscription being created/edited */
-	var $subscription;
+class SubscriptionForm extends Form
+{
+    /** @var Subscription the subscription being created/edited */
+    public $subscription;
 
-	/** @var int the user associated with the subscription */
-	var $userId;
+    /** @var int the user associated with the subscription */
+    public $userId;
 
-	/** @var array of subscription types */
-	var $subscriptionTypes;
+    /** @var array of subscription types */
+    public $subscriptionTypes;
 
-	/** @var array valid subscription status values */
-	var $validStatus;
+    /** @var array valid subscription status values */
+    public $validStatus;
 
-	/** @var array valid user country values */
-	var $validCountries;
+    /** @var array valid user country values */
+    public $validCountries;
 
-	/**
-	 * Constructor
-	 * @param $template string? Template to use for form presentation
-	 * @param $subscriptionId int The subscription ID for this subscription; null for new subscription
-	 */
-	function __construct($template, $subscriptionId = null) {
-		parent::__construct($template);
+    /**
+     * Constructor
+     *
+     * @param string? $template Template to use for form presentation
+     * @param int $subscriptionId The subscription ID for this subscription; null for new subscription
+     */
+    public function __construct($template, $subscriptionId = null)
+    {
+        parent::__construct($template);
 
-		$subscriptionId = isset($subscriptionId) ? (int) $subscriptionId : null;
+        $subscriptionId = isset($subscriptionId) ? (int) $subscriptionId : null;
 
-		$this->subscription = null;
-		$this->subscriptionTypes = null;
+        $this->subscription = null;
+        $this->subscriptionTypes = null;
 
-		import('classes.subscription.SubscriptionDAO');
-		$this->validStatus = SubscriptionDAO::getStatusOptions();
+        $this->validStatus = SubscriptionDAO::getStatusOptions();
 
-		$countryDao = DAORegistry::getDAO('CountryDAO');
-		$this->validCountries =& $countryDao->getCountries();
+        $this->validCountries = [];
+        foreach (Locale::getCountries() as $country) {
+            $this->validCountries[$country->getAlpha2()] = $country->getLocalName();
+        }
+        asort($this->validCountries);
 
-		// User is provided and valid
-		$this->addCheck(new FormValidator($this, 'userId', 'required', 'manager.subscriptions.form.userIdRequired'));
-		$this->addCheck(new FormValidatorCustom($this, 'userId', 'required', 'manager.subscriptions.form.userIdValid', create_function('$userId', '$userDao = DAORegistry::getDAO(\'UserDAO\'); return $userDao->userExistsById($userId);')));
+        // User is provided and valid
+        $this->addCheck(new \PKP\form\validation\FormValidator($this, 'userId', 'required', 'manager.subscriptions.form.userIdRequired'));
+        $this->addCheck(new \PKP\form\validation\FormValidatorCustom($this, 'userId', 'required', 'manager.subscriptions.form.userIdValid', fn ($userId) => !!Repo::user()->get($userId)));
 
-		// Subscription status is provided and valid
-		$this->addCheck(new FormValidator($this, 'status', 'required', 'manager.subscriptions.form.statusRequired'));
-		$this->addCheck(new FormValidatorInSet($this, 'status', 'required', 'manager.subscriptions.form.statusValid', array_keys($this->validStatus)));
-		// Subscription type is provided
-		$this->addCheck(new FormValidator($this, 'typeId', 'required', 'manager.subscriptions.form.typeIdRequired'));
-		// Notify email flag is valid value
-		$this->addCheck(new FormValidatorInSet($this, 'notifyEmail', 'optional', 'manager.subscriptions.form.notifyEmailValid', array('1')));
+        // Subscription status is provided and valid
+        $this->addCheck(new \PKP\form\validation\FormValidator($this, 'status', 'required', 'manager.subscriptions.form.statusRequired'));
+        $this->addCheck(new \PKP\form\validation\FormValidatorInSet($this, 'status', 'required', 'manager.subscriptions.form.statusValid', array_keys($this->validStatus)));
+        // Subscription type is provided
+        $this->addCheck(new \PKP\form\validation\FormValidator($this, 'typeId', 'required', 'manager.subscriptions.form.typeIdRequired'));
+        // Notify email flag is valid value
+        $this->addCheck(new \PKP\form\validation\FormValidatorInSet($this, 'notifyEmail', 'optional', 'manager.subscriptions.form.notifyEmailValid', ['1']));
 
-		$this->addCheck(new FormValidatorPost($this));
-		$this->addCheck(new FormValidatorCSRF($this));
-	}
+        $this->addCheck(new \PKP\form\validation\FormValidatorPost($this));
+        $this->addCheck(new \PKP\form\validation\FormValidatorCSRF($this));
+    }
 
-	/**
-	 * Display the form.
-	 * @param $request PKPRequest
-	 */
-	function fetch($request) {
-		$templateMgr = TemplateManager::getManager($request);
-		$templateMgr->assign(array(
-			'subscriptionId' => $this->subscription?$this->subscription->getId():null,
-			'yearOffsetPast' => SUBSCRIPTION_YEAR_OFFSET_PAST,
-			'yearOffsetFuture' => SUBSCRIPTION_YEAR_OFFSET_FUTURE,
-			'validStatus' => $this->validStatus,
-			'subscriptionTypes' => $this->subscriptionTypes,
-		));
-		return parent::fetch($request);
-	}
+    /**
+     * Display the form.
+     *
+     * @copydoc Form::fetch
+     *
+     * @param null|mixed $template
+     */
+    public function fetch($request, $template = null, $display = false)
+    {
+        $templateMgr = TemplateManager::getManager($request);
+        $templateMgr->assign([
+            'subscriptionId' => $this->subscription ? $this->subscription->getId() : null,
+            'yearOffsetPast' => Subscription::SUBSCRIPTION_YEAR_OFFSET_PAST,
+            'yearOffsetFuture' => Subscription::SUBSCRIPTION_YEAR_OFFSET_FUTURE,
+            'validStatus' => $this->validStatus,
+            'subscriptionTypes' => $this->subscriptionTypes,
+        ]);
+        return parent::fetch($request, $template, $display);
+    }
 
-	/**
-	 * Initialize form data from current subscription.
-	 */
-	function initData() {
-		if (isset($this->subscription)) {
-			$subscription = $this->subscription;
-			$this->_data = array(
-				'status' => $subscription->getStatus(),
-				'userId' => $subscription->getUserId(),
-				'typeId' => $subscription->getTypeId(),
-				'dateStart' => $subscription->getDateStart(),
-				'dateEnd' => $subscription->getDateEnd(),
-				'membership' => $subscription->getMembership(),
-				'referenceNumber' => $subscription->getReferenceNumber(),
-				'notes' => $subscription->getNotes()
-			);
-		}
-	}
+    /**
+     * Initialize form data from current subscription.
+     */
+    public function initData()
+    {
+        if (isset($this->subscription)) {
+            $subscription = $this->subscription;
+            $this->_data = [
+                'status' => $subscription->getStatus(),
+                'userId' => $subscription->getUserId(),
+                'typeId' => $subscription->getTypeId(),
+                'dateStart' => $subscription->getDateStart(),
+                'dateEnd' => $subscription->getDateEnd(),
+                'membership' => $subscription->getMembership(),
+                'referenceNumber' => $subscription->getReferenceNumber(),
+                'notes' => $subscription->getNotes()
+            ];
+        }
+    }
 
-	/**
-	 * Assign form data to user-submitted data.
-	 */
-	function readInputData() {
-		$this->readUserVars(array('status', 'userId', 'typeId', 'dateStartYear', 'dateStartMonth', 'dateStartDay', 'dateEndYear', 'dateEndMonth', 'dateEndDay', 'membership', 'referenceNumber', 'notes', 'notifyEmail', 'dateStart', 'dateEnd'));
+    /**
+     * Assign form data to user-submitted data.
+     */
+    public function readInputData()
+    {
+        $this->readUserVars(['status', 'userId', 'typeId', 'membership', 'referenceNumber', 'notes', 'notifyEmail', 'dateStart', 'dateEnd']);
 
-		// If subscription type requires it, membership is provided
-		$subscriptionTypeDao = DAORegistry::getDAO('SubscriptionTypeDAO');
-		$needMembership = $subscriptionTypeDao->getSubscriptionTypeMembership($this->getData('typeId'));
+        // If subscription type requires it, membership is provided
+        $subscriptionTypeDao = DAORegistry::getDAO('SubscriptionTypeDAO'); /** @var SubscriptionTypeDAO $subscriptionTypeDao */
+        $needMembership = $subscriptionTypeDao->getSubscriptionTypeMembership($this->getData('typeId'));
 
-		if ($needMembership) {
-			$this->addCheck(new FormValidator($this, 'membership', 'required', 'manager.subscriptions.form.membershipRequired'));
-		}
+        if ($needMembership) {
+            $this->addCheck(new \PKP\form\validation\FormValidator($this, 'membership', 'required', 'manager.subscriptions.form.membershipRequired'));
+        }
 
-		// If subscription type requires it, start and end dates are provided
-		$subscriptionType = $subscriptionTypeDao->getById($this->getData('typeId'));
-		$nonExpiring = $subscriptionType->getNonExpiring();
+        // If subscription type requires it, start and end dates are provided
+        $subscriptionType = $subscriptionTypeDao->getById($this->getData('typeId'));
+        $nonExpiring = $subscriptionType->getNonExpiring();
 
-		if (!$nonExpiring) {
-			// Start date is provided and is valid
-			$this->addCheck(new FormValidator($this, 'dateStart', 'required', 'manager.subscriptions.form.dateStartRequired'));
-			$this->addCheck(new FormValidatorCustom($this, 'dateStart', 'required', 'manager.subscriptions.form.dateStartValid', create_function('$dateStart', '$dateStartYear = strftime(\'%Y\', strtotime($dateStart)); $minYear = date(\'Y\') + SUBSCRIPTION_YEAR_OFFSET_PAST; $maxYear = date(\'Y\') + SUBSCRIPTION_YEAR_OFFSET_FUTURE; return ($dateStartYear >= $minYear && $dateStartYear <= $maxYear) ? true : false;')));
-			$this->addCheck(new FormValidatorCustom($this, 'dateStart', 'required', 'manager.subscriptions.form.dateStartValid', create_function('$dateStart', '$dateStartMonth = strftime(\'%m\', strtotime($dateStart)); return ($dateStartMonth >= 1 && $dateStartMonth <= 12) ? true : false;')));
-			$this->addCheck(new FormValidatorCustom($this, 'dateStart', 'required', 'manager.subscriptions.form.dateStartValid', create_function('$dateStart', '$dateStartDay = strftime(\'%d\', strtotime($dateStart)); return ($dateStartDay >= 1 && $dateStartDay <= 31) ? true : false;')));
+        if (!$nonExpiring) {
+            // Start date is provided and is valid
+            $this->addCheck(new \PKP\form\validation\FormValidator($this, 'dateStart', 'required', 'manager.subscriptions.form.dateStartRequired'));
+            $this->addCheck(new \PKP\form\validation\FormValidatorCustom($this, 'dateStart', 'required', 'manager.subscriptions.form.dateStartValid', function ($dateStart) {
+                $dateStartYear = date('Y', strtotime($dateStart));
+                $minYear = date('Y') + Subscription::SUBSCRIPTION_YEAR_OFFSET_PAST;
+                $maxYear = date('Y') + Subscription::SUBSCRIPTION_YEAR_OFFSET_FUTURE;
+                return ($dateStartYear >= $minYear && $dateStartYear <= $maxYear);
+            }));
+            $this->addCheck(new \PKP\form\validation\FormValidatorCustom($this, 'dateStart', 'required', 'manager.subscriptions.form.dateStartValid', function ($dateStart) {
+                $dateStartMonth = date('m', strtotime($dateStart));
+                return ($dateStartMonth >= 1 && $dateStartMonth <= 12);
+            }));
+            $this->addCheck(new \PKP\form\validation\FormValidatorCustom($this, 'dateStart', 'required', 'manager.subscriptions.form.dateStartValid', function ($dateStart) {
+                $dateStartDay = date('d', strtotime($dateStart));
+                return ($dateStartDay >= 1 && $dateStartDay <= 31);
+            }));
 
-			// End date is provided and is valid
-			$this->addCheck(new FormValidator($this, 'dateEnd', 'required', 'manager.subscriptions.form.dateEndRequired'));
-			$this->addCheck(new FormValidatorCustom($this, 'dateEnd', 'required', 'manager.subscriptions.form.dateEndValid', create_function('$dateEnd', '$dateEndYear = strftime(\'%Y\', strtotime($dateEnd)); $minYear = date(\'Y\') + SUBSCRIPTION_YEAR_OFFSET_PAST; $maxYear = date(\'Y\') + SUBSCRIPTION_YEAR_OFFSET_FUTURE; return ($dateEndYear >= $minYear && $dateEndYear <= $maxYear) ? true : false;')));
-			$this->addCheck(new FormValidatorCustom($this, 'dateEnd', 'required', 'manager.subscriptions.form.dateEndValid', create_function('$dateEnd', '$dateEndMonth = strftime(\'%m\', strtotime($dateEnd)); return ($dateEndMonth >= 1 && $dateEndMonth <= 12) ? true : false;')));
-			$this->addCheck(new FormValidatorCustom($this, 'dateEnd', 'required', 'manager.subscriptions.form.dateEndValid', create_function('$dateEnd', '$dateEndDay = strftime(\'%d\', strtotime($dateEnd)); return ($dateEndDay >= 1 && $dateEndDay <= 31) ? true : false;')));
-		}
+            // End date is provided and is valid
+            $this->addCheck(new \PKP\form\validation\FormValidator($this, 'dateEnd', 'required', 'manager.subscriptions.form.dateEndRequired'));
+            $this->addCheck(new \PKP\form\validation\FormValidatorCustom($this, 'dateEnd', 'required', 'manager.subscriptions.form.dateEndValid', function ($dateEnd) {
+                $dateEndYear = date('Y', strtotime($dateEnd));
+                $minYear = date('Y') + Subscription::SUBSCRIPTION_YEAR_OFFSET_PAST;
+                $maxYear = date('Y') + Subscription::SUBSCRIPTION_YEAR_OFFSET_FUTURE;
+                return ($dateEndYear >= $minYear && $dateEndYear <= $maxYear);
+            }));
+            $this->addCheck(new \PKP\form\validation\FormValidatorCustom($this, 'dateEnd', 'required', 'manager.subscriptions.form.dateEndValid', function ($dateEnd) {
+                $dateEndMonth = date('m', strtotime($dateEnd));
+                return ($dateEndMonth >= 1 && $dateEndMonth <= 12);
+            }));
+            $this->addCheck(new \PKP\form\validation\FormValidatorCustom($this, 'dateEnd', 'required', 'manager.subscriptions.form.dateEndValid', function ($dateEnd) {
+                $dateEndDay = date('d', strtotime($dateEnd));
+                return ($dateEndDay >= 1 && $dateEndDay <= 31);
+            }));
+        } else {
+            // Is non-expiring; ensure that start/end dates weren't entered.
+            $this->addCheck(new \PKP\form\validation\FormValidatorCustom($this, 'dateStart', 'optional', 'manager.subscriptions.form.dateStartEmpty', function ($dateStart) {
+                return empty($dateStart);
+            }));
+            $this->addCheck(new \PKP\form\validation\FormValidatorCustom($this, 'dateEnd', 'optional', 'manager.subscriptions.form.dateEndEmpty', function ($dateEnd) {
+                return empty($dateEnd);
+            }));
+        }
 
-		// If notify email is requested, ensure subscription contact name and email exist.
-		if ($this->_data['notifyEmail'] == 1) {
-			$this->addCheck(new FormValidatorCustom($this, 'notifyEmail', 'required', 'manager.subscriptions.form.subscriptionContactRequired', create_function('', '$journal = Request::getJournal(); $journalSettingsDao = DAORegistry::getDAO(\'JournalSettingsDAO\'); $subscriptionName = $journalSettingsDao->getSetting($journal->getId(), \'subscriptionName\'); $subscriptionEmail = $journalSettingsDao->getSetting($journal->getId(), \'subscriptionEmail\'); return $subscriptionName != \'\' && $subscriptionEmail != \'\' ? true : false;'), array()));
-		}
-	}
+        // If notify email is requested, ensure subscription contact name and email exist.
+        if ($this->_data['notifyEmail'] == 1) {
+            $this->addCheck(new \PKP\form\validation\FormValidatorCustom($this, 'notifyEmail', 'required', 'manager.subscriptions.form.subscriptionContactRequired', function () {
+                $request = Application::get()->getRequest();
+                $journal = $request->getJournal();
+                $subscriptionName = $journal->getData('subscriptionName');
+                $subscriptionEmail = $journal->getData('subscriptionEmail');
+                return $subscriptionName != '' && $subscriptionEmail != '';
+            }));
+        }
+    }
 
-	/**
-	 * Save subscription.
-	 */
-	function execute() {
-		$journal = Request::getJournal();
-		$subscription =& $this->subscription;
+    /**
+     * @copydoc Form::execute
+     */
+    public function execute(...$functionArgs)
+    {
+        $request = Application::get()->getRequest();
+        $journal = $request->getJournal();
+        $subscription = & $this->subscription;
 
-		$subscription->setJournalId($journal->getId());
-		$subscription->setStatus($this->getData('status'));
-		$subscription->setUserId($this->getData('userId'));
-		$subscription->setTypeId($this->getData('typeId'));
-		$subscription->setMembership($this->getData('membership') ? $this->getData('membership') : null);
-		$subscription->setReferenceNumber($this->getData('referenceNumber') ? $this->getData('referenceNumber') : null);
-		$subscription->setNotes($this->getData('notes') ? $this->getData('notes') : null);
+        parent::execute(...$functionArgs);
 
-		$subscriptionTypeDao = DAORegistry::getDAO('SubscriptionTypeDAO');
-		$subscriptionType = $subscriptionTypeDao->getById($subscription->getTypeId());
-		if (!$subscriptionType->getNonExpiring()) {
-			$subscription->setDateStart($this->getData('dateStart'));
-			$subscription->setDateEnd($this->getData('dateEnd'));
-		}
-	}
+        $subscription->setJournalId($journal->getId());
+        $subscription->setStatus($this->getData('status'));
+        $subscription->setUserId($this->getData('userId'));
+        $subscription->setTypeId($this->getData('typeId'));
+        $subscription->setMembership($this->getData('membership') ? $this->getData('membership') : null);
+        $subscription->setReferenceNumber($this->getData('referenceNumber') ? $this->getData('referenceNumber') : null);
+        $subscription->setNotes($this->getData('notes') ? $this->getData('notes') : null);
 
-	/**
-	 * Internal function to prepare notification email
-	 * @param $emailTemplateKey string
-	 */
-	function _prepareNotificationEmail($mailTemplateKey) {
-		$userDao = DAORegistry::getDAO('UserDAO');
-		$subscriptionTypeDao = DAORegistry::getDAO('SubscriptionTypeDAO');
-		$journalSettingsDao = DAORegistry::getDAO('JournalSettingsDAO');
+        $subscriptionTypeDao = DAORegistry::getDAO('SubscriptionTypeDAO'); /** @var SubscriptionTypeDAO $subscriptionTypeDao */
+        $subscriptionType = $subscriptionTypeDao->getById($subscription->getTypeId());
+        if (!$subscriptionType->getNonExpiring()) {
+            $subscription->setDateStart($this->getData('dateStart'));
+            $dateEnd = strtotime($this->getData('dateEnd'));
+            $subscription->setDateEnd(mktime(23, 59, 59, (int) date('m', $dateEnd), (int) date('d', $dateEnd), (int) date('Y', $dateEnd)));
+        }
+    }
 
-		$journal = Request::getJournal();
-		$journalName = $journal->getLocalizedTitle();
-		$journalId = $journal->getId();
-		$user = $userDao->getById($this->subscription->getUserId());
-		$subscriptionType = $subscriptionTypeDao->getById($this->subscription->getTypeId());
+    /**
+     * Internal function to prepare notification email
+     */
+    protected function _prepareNotificationEmail($mailTemplateKey)
+    {
+        $subscriptionTypeDao = DAORegistry::getDAO('SubscriptionTypeDAO'); /** @var SubscriptionTypeDAO $subscriptionTypeDao */
 
-		$subscriptionName = $journalSettingsDao->getSetting($journalId, 'subscriptionName');
-		$subscriptionEmail = $journalSettingsDao->getSetting($journalId, 'subscriptionEmail');
-		$subscriptionPhone = $journalSettingsDao->getSetting($journalId, 'subscriptionPhone');
-		$subscriptionMailingAddress = $journalSettingsDao->getSetting($journalId, 'subscriptionMailingAddress');
-		$subscriptionContactSignature = $subscriptionName;
+        $request = Application::get()->getRequest();
+        $journal = $request->getJournal();
+        $journalName = $journal->getLocalizedTitle();
+        $user = Repo::user()->get($this->subscription->getUserId());
+        $subscriptionType = $subscriptionTypeDao->getById($this->subscription->getTypeId());
 
-		if ($subscriptionMailingAddress != '') {
-			$subscriptionContactSignature .= "\n" . $subscriptionMailingAddress;
-		}
-		if ($subscriptionPhone != '') {
-			$subscriptionContactSignature .= "\n" . __('user.phone') . ': ' . $subscriptionPhone;
-		}
+        $subscriptionName = $journal->getData('subscriptionName');
+        $subscriptionEmail = $journal->getData('subscriptionEmail');
+        $subscriptionPhone = $journal->getData('subscriptionPhone');
+        $subscriptionMailingAddress = $journal->getData('subscriptionMailingAddress');
+        $subscriptionContactSignature = $subscriptionName;
 
-		$subscriptionContactSignature .= "\n" . __('user.email') . ': ' . $subscriptionEmail;
+        if ($subscriptionMailingAddress != '') {
+            $subscriptionContactSignature .= "\n" . $subscriptionMailingAddress;
+        }
+        if ($subscriptionPhone != '') {
+            $subscriptionContactSignature .= "\n" . __('user.phone') . ': ' . $subscriptionPhone;
+        }
 
-		$paramArray = array(
-			'subscriberName' => $user->getFullName(),
-			'journalName' => $journalName,
-			'subscriptionType' => $subscriptionType->getSummaryString(),
-			'username' => $user->getUsername(),
-			'subscriptionContactSignature' => $subscriptionContactSignature
-		);
+        $subscriptionContactSignature .= "\n" . __('user.email') . ': ' . $subscriptionEmail;
 
-		import('lib.pkp.classes.mail.MailTemplate');
-		$mail = new MailTemplate($mailTemplateKey);
-		$mail->setReplyTo($subscriptionEmail, $subscriptionName);
-		$mail->addRecipient($user->getEmail(), $user->getFullName());
-		$mail->setSubject($mail->getSubject($journal->getPrimaryLocale()));
-		$mail->setBody($mail->getBody($journal->getPrimaryLocale()));
-		$mail->assignParams($paramArray);
+        $paramArray = [
+            'recipientName' => $user->getFullName(),
+            'journalName' => $journalName,
+            'subscriptionType' => $subscriptionType->getSummaryString(),
+            'recipientUsername' => $user->getUsername(),
+            'signature' => $subscriptionContactSignature
+        ];
 
-		return $mail;
-	}
+        $mail = new MailTemplate($mailTemplateKey);
+        $mail->setReplyTo($subscriptionEmail, $subscriptionName);
+        $mail->addRecipient($user->getEmail(), $user->getFullName());
+        $mail->setSubject($mail->getSubject($journal->getPrimaryLocale()));
+        $mail->setBody($mail->getBody($journal->getPrimaryLocale()));
+        $mail->assignParams($paramArray);
+
+        return $mail;
+    }
 }
 
-?>
+if (!PKP_STRICT_MODE) {
+    class_alias('\APP\subscription\form\SubscriptionForm', '\SubscriptionForm');
+}

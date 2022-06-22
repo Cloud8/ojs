@@ -3,9 +3,9 @@
 /**
  * @file pages/article/ArticleHandler.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class ArticleHandler
  * @ingroup pages_article
@@ -14,433 +14,576 @@
  *
  */
 
-import('classes.handler.Handler');
-
-class ArticleHandler extends Handler {
-	/** journal associated with the request **/
-	var $journal;
-
-	/** issue associated with the request **/
-	var $issue;
-
-	/** article associated with the request **/
-	var $article;
-
-	/** galley associated with the request **/
-	var $galley;
-
-
-	/**
-	 * @copydoc PKPHandler::authorize()
-	 */
-	function authorize($request, &$args, $roleAssignments) {
-		import('lib.pkp.classes.security.authorization.ContextRequiredPolicy');
-		$this->addPolicy(new ContextRequiredPolicy($request));
-
-		import('classes.security.authorization.OjsJournalMustPublishPolicy');
-		$this->addPolicy(new OjsJournalMustPublishPolicy($request));
-
-		return parent::authorize($request, $args, $roleAssignments);
-	}
-
-	/**
-	 * @see PKPHandler::initialize()
-	 */
-	function initialize($request, $args) {
-		$articleId = isset($args[0]) ? $args[0] : 0;
-
-		$journal = $request->getContext();
-		$publishedArticleDao = DAORegistry::getDAO('PublishedArticleDAO');
-		$publishedArticle = $publishedArticleDao->getPublishedArticleByBestArticleId((int) $journal->getId(), $articleId, true);
-
-		$issueDao = DAORegistry::getDAO('IssueDAO');
-		if (isset($publishedArticle)) {
-			$issue = $issueDao->getById($publishedArticle->getIssueId(), $publishedArticle->getJournalId(), true);
-			$this->issue = $issue;
-			$this->article = $publishedArticle;
-		} else {
-			$articleDao = DAORegistry::getDAO('ArticleDAO');
-			$article = $articleDao->getById((int) $articleId, $journal->getId(), true);
-			$this->article = $article;
-		}
-
-		if (!isset($this->article)) $request->getDispatcher()->handle404();
-
-		if (in_array($request->getRequestedOp(), array('view', 'download'))) {
-			$galleyId = isset($args[1]) ? $args[1] : 0;
-			$galleyDao = DAORegistry::getDAO('ArticleGalleyDAO');
-			$this->galley = $galleyDao->getByBestGalleyId($galleyId, $this->article->getId());
-			if ($galleyId && !$this->galley) $request->getDispatcher()->handle404();
-		}
-	}
-
-	/**
-	 * View Article. (Either article landing page or galley view.)
-	 * @param $args array
-	 * @param $request Request
-	 */
-	function view($args, $request) {
-		$articleId = array_shift($args);
-		$galleyId = array_shift($args);
-		$fileId = array_shift($args);
-
-		$journal = $request->getJournal();
-		$user = $request->getUser();
-		$issue = $this->issue;
-		$article = $this->article;
-		$templateMgr = TemplateManager::getManager($request);
-		$templateMgr->assign(array(
-			'issue' => $issue,
-			'article' => $article,
-			'fileId' => $fileId,
-		));
-		$this->setupTemplate($request);
-
-		if (!$this->userCanViewGalley($request, $articleId, $galleyId)) fatalError('Cannot view galley.');
-
-		// Get galleys sorted into primary and supplementary groups
-		$galleys = $article->getGalleys();
-		$primaryGalleys = array();
-		$supplementaryGalleys = array();
-		if ($galleys) {
-			$genreDao = DAORegistry::getDAO('GenreDAO');
-			$primaryGenres = $genreDao->getPrimaryByContextId($journal->getId())->toArray();
-			$primaryGenreIds = array_map(function($genre) {
-				return $genre->getId();
-			}, $primaryGenres);
-			$supplementaryGenres = $genreDao->getBySupplementaryAndContextId(true, $journal->getId())->toArray();
-			$supplementaryGenreIds = array_map(function($genre) {
-				return $genre->getId();
-			}, $supplementaryGenres);
-
-			foreach ($galleys as $galley) {
-				$file = $galley->getFile();
-				if (!$file) {
-					continue;
-				}
-				if (in_array($file->getGenreId(), $primaryGenreIds)) {
-					$primaryGalleys[] = $galley;
-				} elseif (in_array($file->getGenreId(), $supplementaryGenreIds)) {
-					$supplementaryGalleys[] = $galley;
-				}
-			}
-		}
-		$templateMgr->assign(array(
-			'primaryGalleys' => $primaryGalleys,
-			'supplementaryGalleys' => $supplementaryGalleys,
-		));
-
-		// Fetch and assign the section to the template
-		$sectionDao = DAORegistry::getDAO('SectionDAO');
-		$section = $sectionDao->getById($article->getSectionId(), $journal->getId(), true);
-		$templateMgr->assign('section', $section);
-
-		// Fetch and assign the galley to the template
-		$galleyDao = DAORegistry::getDAO('ArticleGalleyDAO');
-		$galley = $galleyDao->getByBestGalleyId($galleyId, $article->getId());
-		if ($galley && $galley->getRemoteURL()) $request->redirectUrl($galley->getRemoteURL());
-
-		// Copyright and license info
-		$templateMgr->assign(array(
-			'copyright' => $journal->getLocalizedSetting('copyrightNotice'),
-		));
-		if ($article->getLicenseURL()) $templateMgr->assign(array(
-			'licenseUrl' => $article->getLicenseURL(),
-			'ccLicenseBadge' => Application::getCCLicenseBadge($article->getLicenseURL()),
-			'copyrightHolder' => $article->getLocalizedCopyrightHolder(),
-			'copyrightYear' => $article->getCopyrightYear(),
-		));
-
-		// Keywords
-		$submissionKeywordDao = DAORegistry::getDAO('SubmissionKeywordDAO');
-		$templateMgr->assign('keywords', $submissionKeywordDao->getKeywords($article->getId(), array(AppLocale::getLocale())));
-
-		// Consider public identifiers
-		$pubIdPlugins = PluginRegistry::loadCategory('pubIds', true);
-		$templateMgr->assign('pubIdPlugins', $pubIdPlugins);
-
-		// Citation formats
-		$citationPlugins = PluginRegistry::loadCategory('citationFormats');
-		uasort($citationPlugins, create_function('$a, $b', 'return strcmp($a->getDisplayName(), $b->getDisplayName());'));
-		$templateMgr->assign('citationPlugins', $citationPlugins);
-
-		if (!$galley) {
-			// No galley: Prepare the article landing page.
-
-			// Get the subscription status if displaying the abstract;
-			// if access is open, we can display links to the full text.
-			import('classes.issue.IssueAction');
-
-			// The issue may not exist, if this is an editorial user
-			// and scheduling hasn't been completed yet for the article.
-			$issueAction = new IssueAction();
-			$subscriptionRequired = false;
-			if ($issue) {
-				$subscriptionRequired = $issueAction->subscriptionRequired($issue, $journal);
-			}
-
-			$subscribedUser = $issueAction->subscribedUser($user, $journal, isset($issue) ? $issue->getId() : null, isset($article) ? $article->getId() : null);
-			$subscribedDomain = $issueAction->subscribedDomain($request, $journal, isset($issue) ? $issue->getId() : null, isset($article) ? $article->getId() : null);
-
-			$templateMgr->assign('hasAccess', !$subscriptionRequired || (isset($article) && $article->getAccessStatus() == ARTICLE_ACCESS_OPEN) || $subscribedUser || $subscribedDomain);
-
-			import('classes.payment.ojs.OJSPaymentManager');
-			$paymentManager = new OJSPaymentManager($request);
-			if ( $paymentManager->onlyPdfEnabled() ) {
-				$templateMgr->assign('restrictOnlyPdf', true);
-			}
-			if ( $paymentManager->purchaseArticleEnabled() ) {
-				$templateMgr->assign('purchaseArticleEnabled', true);
-			}
-
-			if (!HookRegistry::call('ArticleHandler::view', array(&$request, &$issue, &$article))) {
-				return $templateMgr->display('frontend/pages/article.tpl');
-			}
-		} else {
-			// Galley: Prepare the galley file download.
-			if (!HookRegistry::call('ArticleHandler::view::galley', array(&$request, &$issue, &$galley, &$article))) {
-				$request->redirect(null, null, 'download', array($articleId, $galleyId));
-			}
-
-		}
-	}
-
-	/**
-	 * Download an article file
-	 * For deprecated OJS 2.x URLs; see https://github.com/pkp/pkp-lib/issues/1541
-	 * @param $args array
-	 * @param $request PKPRequest
-	 */
-	function viewFile($args, $request) {
-		$articleId = isset($args[0]) ? $args[0] : 0;
-		$galleyId = isset($args[1]) ? $args[1] : 0;
-		$fileId = isset($args[2]) ? (int) $args[2] : 0;
-		header('HTTP/1.1 301 Moved Permanently');
-		$request->redirect(null, null, 'download', array($articleId, $galleyId, $fileId));
-	}
-
-	/**
-	 * Download a supplementary file.
-	 * For deprecated OJS 2.x URLs; see https://github.com/pkp/pkp-lib/issues/1541
-	 * @param $args array
-	 * @param $request PKPRequest
-	 */
-	function downloadSuppFile($args, $request) {
-		$articleId = isset($args[0]) ? $args[0] : 0;
-		$suppId = isset($args[1]) ? $args[1] : 0;
-		$submissionFileDao = DAORegistry::getDAO('SubmissionFileDAO');
-		$submissionFiles = $submissionFileDao->getBySubmissionId($articleId);
-		foreach ($submissionFiles as $submissionFile) {
-			if ($submissionFile->getData('old-supp-id') == $suppId) {
-				$articleGalleyDao = DAORegistry::getDAO('ArticleGalleyDAO');
-				$articleGalleys = $articleGalleyDao->getBySubmissionId($articleId);
-				while ($articleGalley = $articleGalleys->next()) {
-					$galleyFile = $articleGalley->getFile();
-					if ($galleyFile && $galleyFile->getFileId() == $submissionFile->getFileId()) {
-						header('HTTP/1.1 301 Moved Permanently');
-						$request->redirect(null, null, 'download', array($articleId, $articleGalley->getId(), $submissionFile->getFileId()));
-					}
-				}
-			}
-		}
-		$dispatcher = $request->getDispatcher();
-		$dispatcher->handle404();
-	}
-
-	/**
-	 * Download an article file
-	 * @param array $args
-	 * @param PKPRequest $request
-	 */
-	function download($args, $request) {
-		$articleId = isset($args[0]) ? $args[0] : 0;
-		$galleyId = isset($args[1]) ? $args[1] : 0;
-		$fileId = isset($args[2]) ? (int) $args[2] : 0;
-
-		if ($this->galley->getRemoteURL()) $request->redirectUrl($this->galley->getRemoteURL());
-		else if ($this->userCanViewGalley($request, $articleId, $galleyId)) {
-			if (!$fileId) {
-				$submissionFile = $this->galley->getFile();
-				if ($submissionFile) {
-					$fileId = $submissionFile->getFileId();
-					// The file manager expects the real article id.  Extract it from the submission file.
-					$articleId = $submissionFile->getSubmissionId();
-				} else { // no proof files assigned to this galley!
-					header('HTTP/1.0 403 Forbidden');
-					echo '403 Forbidden<br>';
-					return;
-				}
-			}
-
-			if (!HookRegistry::call('ArticleHandler::download', array($this->article, &$this->galley, &$fileId))) {
-				import('lib.pkp.classes.file.SubmissionFileManager');
-				$submissionFileManager = new SubmissionFileManager($this->article->getContextId(), $this->article->getId());
-				$submissionFileManager->downloadFile($fileId, null, $request->getUserVar('inline')?true:false);
-			}
-		} else {
-			header('HTTP/1.0 403 Forbidden');
-			echo '403 Forbidden<br>';
-		}
-	}
-
-	/**
-	 * Determines whether a user can view this article galley or not.
-	 * @param $request Request
-	 * @param $articleId string
-	 * @param $galleyId int or string
-	 */
-	function userCanViewGalley($request, $articleId, $galleyId = null) {
-
-		import('classes.issue.IssueAction');
-		$issueAction = new IssueAction();
-
-		$journal = $request->getJournal();
-		$publishedArticle = $this->article;
-		$issue = $this->issue;
-		$journalId = $journal->getId();
-		$user = $request->getUser();
-		$userId = $user?$user->getId():0;
-
-		// If this is an editorial user who can view unpublished/unscheduled
-		// articles, bypass further validation. Likewise for its author.
-		if ($publishedArticle && $issueAction->allowedPrePublicationAccess($journal, $publishedArticle, $user)) {
-			return true;
-		}
-
-		// Make sure the reader has rights to view the article/issue.
-		if ($issue && $issue->getPublished() && $publishedArticle->getStatus() == STATUS_PUBLISHED) {
-			$subscriptionRequired = $issueAction->subscriptionRequired($issue, $journal);
-			$isSubscribedDomain = $issueAction->subscribedDomain($request, $journal, $issue->getId(), $publishedArticle->getId());
-
-			// Check if login is required for viewing.
-			if (!$isSubscribedDomain && !Validation::isLoggedIn() && $journal->getSetting('restrictArticleAccess') && isset($galleyId) && $galleyId) {
-				Validation::redirectLogin();
-			}
-
-			// bypass all validation if subscription based on domain or ip is valid
-			// or if the user is just requesting the abstract
-			if ( (!$isSubscribedDomain && $subscriptionRequired) && (isset($galleyId) && $galleyId) ) {
-
-				// Subscription Access
-				$subscribedUser = $issueAction->subscribedUser($user, $journal, $issue->getId(), $publishedArticle->getId());
-
-				import('classes.payment.ojs.OJSPaymentManager');
-				$paymentManager = new OJSPaymentManager($request);
-
-				$purchasedIssue = false;
-				if (!$subscribedUser && $paymentManager->purchaseIssueEnabled()) {
-					$completedPaymentDao = DAORegistry::getDAO('OJSCompletedPaymentDAO');
-					$purchasedIssue = $completedPaymentDao->hasPaidPurchaseIssue($userId, $issue->getId());
-				}
-
-				if (!(!$subscriptionRequired || $publishedArticle->getAccessStatus() == ARTICLE_ACCESS_OPEN || $subscribedUser || $purchasedIssue)) {
-
-					if ( $paymentManager->purchaseArticleEnabled() || $paymentManager->membershipEnabled() ) {
-						/* if only pdf files are being restricted, then approve all non-pdf galleys
-						 * and continue checking if it is a pdf galley */
-						if ( $paymentManager->onlyPdfEnabled() ) {
-
-							if ($this->galley && !$this->galley->isPdfGalley() ) {
-								$this->issue = $issue;
-								$this->article = $publishedArticle;
-								return true;
-							}
-						}
-
-						if (!Validation::isLoggedIn()) {
-							Validation::redirectLogin("payment.loginRequired.forArticle");
-						}
-
-						/* if the article has been paid for then forget about everything else
-						 * and just let them access the article */
-						$completedPaymentDao = DAORegistry::getDAO('OJSCompletedPaymentDAO');
-						$dateEndMembership = $user->getSetting('dateEndMembership', 0);
-						if ($completedPaymentDao->hasPaidPurchaseArticle($userId, $publishedArticle->getId())
-							|| (!is_null($dateEndMembership) && $dateEndMembership > time())) {
-							$this->issue = $issue;
-							$this->article = $publishedArticle;
-							return true;
-						} else {
-							$queuedPayment = $paymentManager->createQueuedPayment($journalId, PAYMENT_TYPE_PURCHASE_ARTICLE, $user->getId(), $publishedArticle->getId(), $journal->getSetting('purchaseArticleFee'));
-							$queuedPaymentId = $paymentManager->queuePayment($queuedPayment);
-
-							$paymentManager->displayPaymentForm($queuedPaymentId, $queuedPayment);
-							exit;
-						}
-					}
-
-					if (!isset($galleyId) || $galleyId) {
-						if (!Validation::isLoggedIn()) {
-							Validation::redirectLogin('reader.subscriptionRequiredLoginText');
-						}
-						$request->redirect(null, 'about', 'subscriptions');
-					}
-				}
-			}
-		} else {
-			$request->redirect(null, 'search');
-		}
-		return true;
-	}
-
-	/**
-	 * Fetch an item citation
-	 * @param $args
-	 * @param $request
-	 */
-	function cite($args, $request) {
-		$router = $request->getRouter();
-		$this->setupTemplate($request);
-		$articleId = isset($args[0]) ? $args[0] : 0;
-		$citeType = isset($args[1]) ? $args[1] : null;
-		$returnFormat = isset($args[2]) ? $args[2] : null;
-
-		$citationPlugins = PluginRegistry::loadCategory('citationFormats');
-
-		import('lib.pkp.classes.core.JSONMessage');
-
-		if (empty($citeType) || !isset($citationPlugins[$citeType])) {
-			AppLocale::requireComponents(LOCALE_COMPONENT_APP_SUBMISSION);
-			$errorMessage = __('submission.citationFormat.notFound');
-			if ($returnFormat == 'json') {
-				return new JSONMessage(false, $errorMessage);
-			} else {
-				echo $errorMessage;
-			}
-			return;
-		}
-
-		$article = $this->article;
-		$issue = $this->issue;
-		$journal = $request->getContext();
-
-		// Initiate a file download and exit
-		if ($citationPlugins[$citeType]->isDownloadable()) {
-			$citationPlugins[$citeType]->downloadCitation($article, $issue, $journal);
-			return;
-		}
-
-		$citation = $citationPlugins[$citeType]->fetchCitation($article, $issue, $journal);
-
-		// Return a JSON formatted string
-		if ($returnFormat == 'json') {
-			return new JSONMessage(true, $citation);
-
-		// Display it straight to the browser
-		} else {
-			echo $citation;
-			return;
-		}
-	}
-
-	/**
-	 * Set up the template. (Load required locale components.)
-	 * @param $request PKPRequest
-	 */
-	function setupTemplate($request) {
-		parent::setupTemplate($request);
-		AppLocale::requireComponents(LOCALE_COMPONENT_PKP_READER, LOCALE_COMPONENT_PKP_SUBMISSION);
-	}
+use APP\facades\Repo;
+use APP\handler\Handler;
+use APP\issue\IssueAction;
+use APP\payment\ojs\OJSPaymentManager;
+use APP\security\authorization\OjsJournalMustPublishPolicy;
+use APP\submission\Submission;
+use APP\template\TemplateManager;
+use Firebase\JWT\JWT;
+use PKP\security\authorization\ContextRequiredPolicy;
+use PKP\submission\PKPSubmission;
+use PKP\submissionFile\SubmissionFile;
+
+class ArticleHandler extends Handler
+{
+    /** @var Context Context associated with the request */
+    public $context;
+
+    /** @var Issue Issue associated with the request */
+    public $issue;
+
+    /** @var Submission Submission associated with the request */
+    public $article;
+
+    /** @var Category Category associated with the request */
+    public $categories;
+
+    /** @var Publication Publication associated with the request */
+    public $publication;
+
+    /** @var Representation galley associated with the request */
+    public $galley;
+
+    /** @var int fileId associated with the request */
+    public $fileId;
+
+
+    /**
+     * @copydoc PKPHandler::authorize()
+     */
+    public function authorize($request, &$args, $roleAssignments)
+    {
+        // Permit the use of the Authorization header and an API key for access to unpublished/subscription content
+        if ($header = array_search('Authorization', array_flip(getallheaders()))) {
+            [$bearer, $jwt] = explode(' ', $header);
+            if (strcasecmp($bearer, 'Bearer') == 0 && !empty($jwt)) {
+                $secret = Config::getVar('security', 'api_key_secret', '');
+                if (!$secret) {
+                    $templateMgr = TemplateManager::getManager($request);
+                    $templateMgr->assign('message', 'api.500.apiSecretKeyMissing');
+                    return $templateMgr->display('frontend/pages/message.tpl');
+                }
+                try {
+                    $apiToken = JWT::decode($jwt, $secret, ['HS256']);
+                    // Compatibility with old API keys
+                    // https://github.com/pkp/pkp-lib/issues/6462
+                    if (substr($apiToken, 0, 2) === '""') {
+                        $apiToken = json_decode($apiToken);
+                    }
+                    $this->setApiToken($apiToken);
+                } catch (Exception $e) {
+                    $templateMgr = TemplateManager::getManager($request);
+                    $templateMgr->assign('message', 'api.400.invalidApiToken');
+                    return $templateMgr->display('frontend/pages/message.tpl');
+                }
+            }
+        }
+
+        $this->addPolicy(new ContextRequiredPolicy($request));
+
+        $this->addPolicy(new OjsJournalMustPublishPolicy($request));
+
+        return parent::authorize($request, $args, $roleAssignments);
+    }
+
+    /**
+     * @see PKPHandler::initialize()
+     *
+     * @param Request $request
+     * @param array $args Arguments list
+     */
+    public function initialize($request, $args = [])
+    {
+        $urlPath = empty($args) ? 0 : array_shift($args);
+
+        // Get the submission that matches the requested urlPath
+        $submission = Repo::submission()->getByUrlPath($urlPath, $request->getContext()->getId());
+
+        if (!$submission && ctype_digit((string) $urlPath)) {
+            $submission = Repo::submission()->get($urlPath);
+            if (!$submission || $request->getContext()->getId() != $submission->getContextId()) {
+                $submission = null;
+            }
+        }
+
+        $issueAction = new IssueAction();
+        $context = $request->getContext();
+        $user = $request->getUser();
+
+        if (!$submission || ($submission->getData('status') !== PKPSubmission::STATUS_PUBLISHED && !$issueAction->allowedPrePublicationAccess($context, $submission, $user))) {
+            $request->getDispatcher()->handle404();
+        }
+
+        // If the urlPath does not match the urlPath of the current
+        // publication, redirect to the current URL
+        $currentUrlPath = $submission->getBestId();
+        if ($currentUrlPath && $currentUrlPath != $urlPath) {
+            $newArgs = array_merge([$currentUrlPath], $args);
+            $request->redirect(null, $request->getRequestedPage(), $request->getRequestedOp(), $newArgs);
+        }
+
+        $this->article = $submission;
+
+        // Get the requested publication or if none requested get the current publication
+        $subPath = empty($args) ? 0 : array_shift($args);
+        if ($subPath === 'version') {
+            $publicationId = (int) array_shift($args);
+            $galleyId = empty($args) ? 0 : array_shift($args);
+            foreach ($this->article->getData('publications') as $publication) {
+                if ($publication->getId() === $publicationId) {
+                    $this->publication = $publication;
+                }
+            }
+            if (!$this->publication) {
+                $request->getDispatcher()->handle404();
+            }
+        } else {
+            $this->publication = $this->article->getCurrentPublication();
+            $galleyId = $subPath;
+        }
+
+        if ($this->publication->getData('status') !== PKPSubmission::STATUS_PUBLISHED && !$issueAction->allowedPrePublicationAccess($context, $submission, $user)) {
+            $request->getDispatcher()->handle404();
+        }
+
+        if ($galleyId && in_array($request->getRequestedOp(), ['view', 'download'])) {
+            $galleys = $this->publication->getData('galleys');
+            foreach ($galleys as $galley) {
+                if ($galley->getBestGalleyId() == $galleyId) {
+                    $this->galley = $galley;
+                    break;
+
+                // In some cases, a URL to a galley may use the ID when it should use
+                // the urlPath. Redirect to the galley's correct URL.
+                } elseif (ctype_digit($galleyId) && $galley->getId() == $galleyId) {
+                    $request->redirect(null, $request->getRequestedPage(), $request->getRequestedOp(), [$submission->getBestId(), $galley->getBestGalleyId()]);
+                }
+            }
+            // Redirect to the most recent version of the submission if the request
+            // points to an outdated galley but doesn't use the specific versioned
+            // URL. This can happen when a galley's urlPath is changed between versions.
+            if (!$this->galley) {
+                $publications = $submission->getPublishedPublications();
+                foreach ($publications as $publication) {
+                    foreach ($publication->getData('galleys') as $galley) {
+                        if ($galley->getBestGalleyId() == $galleyId) {
+                            $request->redirect(null, $request->getRequestedPage(), $request->getRequestedOp(), [$submission->getBestId()]);
+                        }
+                    }
+                }
+                $request->getDispatcher()->handle404();
+            }
+
+            // Store the file id if it exists
+            if (!empty($args)) {
+                $this->fileId = array_shift($args);
+            }
+        }
+
+        if ($this->publication->getData('issueId')) {
+            // TODO: Previously fetched issue from cache. Reimplement when caching added.
+            $issue = Repo::issue()->get($this->publication->getData('issueId'));
+            $issue = $issue->getJournalId() == $submission->getData('contextId') ? $issue : null;
+            $this->issue = $issue;
+        }
+    }
+
+    /**
+     * View Article. (Either article landing page or galley view.)
+     *
+     * @param array $args
+     * @param Request $request
+     */
+    public function view($args, $request)
+    {
+        $context = $request->getContext();
+        $user = $request->getUser();
+        $issue = $this->issue;
+        $article = $this->article;
+        $publication = $this->publication;
+        $templateMgr = TemplateManager::getManager($request);
+        $templateMgr->assign([
+            'issue' => $issue,
+            'article' => $article,
+            'publication' => $publication,
+            'currentPublication' => $article->getCurrentPublication(),
+            'galley' => $this->galley,
+            'fileId' => $this->fileId,
+        ]);
+        $this->setupTemplate($request);
+
+        // Get the earliest published publication
+        $firstPublication = $article->getData('publications')->reduce(function ($a, $b) {
+            return empty($a) || strtotime((string) $b->getData('datePublished')) < strtotime((string) $a->getData('datePublished')) ? $b : $a;
+        }, 0);
+        $templateMgr->assign([
+            'firstPublication' => $firstPublication,
+        ]);
+
+        $sectionDao = DAORegistry::getDAO('SectionDAO'); /** @var SectionDAO $sectionDao */
+        $templateMgr->assign([
+            'ccLicenseBadge' => Application::get()->getCCLicenseBadge($publication->getData('licenseUrl')),
+            'publication' => $publication,
+            'section' => $sectionDao->getById($publication->getData('sectionId')),
+        ]);
+
+        if ($this->galley && !$this->userCanViewGalley($request, $article->getId(), $this->galley->getId())) {
+            fatalError('Cannot view galley.');
+        }
+
+        $templateMgr->assign([
+            'categories' => iterator_to_array(Repo::category()->getMany(
+                Repo::category()->getCollector()
+                    ->filterByPublicationIds([$publication->getId()])
+            ))
+        ]);
+
+        // Get galleys sorted into primary and supplementary groups
+        $galleys = $publication->getData('galleys');
+
+        $primaryGalleys = [];
+        $supplementaryGalleys = [];
+        if ($galleys) {
+            $genreDao = DAORegistry::getDAO('GenreDAO'); /** @var GenreDAO $genreDao */
+            $primaryGenres = $genreDao->getPrimaryByContextId($context->getId())->toArray();
+            $primaryGenreIds = array_map(function ($genre) {
+                return $genre->getId();
+            }, $primaryGenres);
+            $supplementaryGenres = $genreDao->getBySupplementaryAndContextId(true, $context->getId())->toArray();
+            $supplementaryGenreIds = array_map(function ($genre) {
+                return $genre->getId();
+            }, $supplementaryGenres);
+
+            foreach ($galleys as $galley) {
+                $remoteUrl = $galley->getRemoteURL();
+                $file = Repo::submissionFile()->get($galley->getData('submissionFileId'));
+                if (!$remoteUrl && !$file) {
+                    continue;
+                }
+                if ($remoteUrl || in_array($file->getGenreId(), $primaryGenreIds)) {
+                    $primaryGalleys[] = $galley;
+                } elseif (in_array($file->getGenreId(), $supplementaryGenreIds)) {
+                    $supplementaryGalleys[] = $galley;
+                }
+            }
+        }
+        $templateMgr->assign([
+            'primaryGalleys' => $primaryGalleys,
+            'supplementaryGalleys' => $supplementaryGalleys,
+        ]);
+
+        // Citations
+        if ($publication->getData('citationsRaw')) {
+            $citationDao = DAORegistry::getDAO('CitationDAO'); /** @var CitationDAO $citationDao */
+            $parsedCitations = $citationDao->getByPublicationId($publication->getId());
+            $templateMgr->assign([
+                'parsedCitations' => $parsedCitations->toArray(),
+            ]);
+        }
+
+        // Assign deprecated values to the template manager for
+        // compatibility with older themes
+        $templateMgr->assign([
+            'licenseTerms' => $context->getLocalizedData('licenseTerms'),
+            'licenseUrl' => $publication->getData('licenseUrl'),
+            'copyrightHolder' => $publication->getLocalizedData('copyrightHolder'),
+            'copyrightYear' => $publication->getData('copyrightYear'),
+            'pubIdPlugins' => PluginRegistry::loadCategory('pubIds', true),
+            'keywords' => $publication->getData('keywords'),
+        ]);
+
+        // Fetch and assign the galley to the template
+        if ($this->galley && $this->galley->getRemoteURL()) {
+            $request->redirectUrl($this->galley->getRemoteURL());
+        }
+
+        if (empty($this->galley)) {
+            // No galley: Prepare the article landing page.
+
+            // Ask robots not to index outdated versions and point to the canonical url for the latest version
+            if ($publication->getId() !== $article->getCurrentPublication()->getId()) {
+                $templateMgr->addHeader('noindex', '<meta name="robots" content="noindex">');
+                $url = $request->getDispatcher()->url($request, PKPApplication::ROUTE_PAGE, null, 'article', 'view', $article->getBestId());
+                $templateMgr->addHeader('canonical', '<link rel="canonical" href="' . $url . '">');
+            }
+
+            // Get the subscription status if displaying the abstract;
+            // if access is open, we can display links to the full text.
+
+            // The issue may not exist, if this is an editorial user
+            // and scheduling hasn't been completed yet for the article.
+            $issueAction = new IssueAction();
+            $subscriptionRequired = false;
+            if ($issue) {
+                $subscriptionRequired = $issueAction->subscriptionRequired($issue, $context);
+            }
+
+            $subscribedUser = $issueAction->subscribedUser($user, $context, isset($issue) ? $issue->getId() : null, isset($article) ? $article->getId() : null);
+            $subscribedDomain = $issueAction->subscribedDomain($request, $context, isset($issue) ? $issue->getId() : null, isset($article) ? $article->getId() : null);
+
+            $completedPaymentDao = DAORegistry::getDAO('OJSCompletedPaymentDAO'); /** @var OJSCompletedPaymentDAO $completedPaymentDao */
+            $templateMgr->assign(
+                'hasAccess',
+                !$subscriptionRequired ||
+                $publication->getData('accessStatus') == Submission::ARTICLE_ACCESS_OPEN ||
+                $subscribedUser || $subscribedDomain ||
+                ($user && $issue && $completedPaymentDao->hasPaidPurchaseIssue($user->getId(), $issue->getId())) ||
+                ($user && $completedPaymentDao->hasPaidPurchaseArticle($user->getId(), $article->getId()))
+            );
+
+            $paymentManager = Application::get()->getPaymentManager($context);
+            if ($paymentManager->onlyPdfEnabled()) {
+                $templateMgr->assign('restrictOnlyPdf', true);
+            }
+            if ($paymentManager->purchaseArticleEnabled()) {
+                $templateMgr->assign('purchaseArticleEnabled', true);
+            }
+
+            if (!HookRegistry::call('ArticleHandler::view', [&$request, &$issue, &$article, $publication])) {
+                return $templateMgr->display('frontend/pages/article.tpl');
+            }
+        } else {
+
+            // Ask robots not to index outdated versions
+            if ($publication->getId() !== $article->getCurrentPublication()->getId()) {
+                $templateMgr->addHeader('noindex', '<meta name="robots" content="noindex">');
+            }
+
+            // Galley: Prepare the galley file download.
+            if (!HookRegistry::call('ArticleHandler::view::galley', [&$request, &$issue, &$this->galley, &$article, $publication])) {
+                if ($this->publication->getId() !== $this->article->getCurrentPublication()->getId()) {
+                    $redirectPath = [
+                        $article->getBestId(),
+                        'version',
+                        $publication->getId(),
+                        $this->galley->getBestGalleyId()
+                    ];
+                } else {
+                    $redirectPath = [
+                        $article->getBestId(),
+                        $this->galley->getBestGalleyId()
+                    ];
+                }
+                $request->redirect(null, null, 'download', $redirectPath);
+            }
+        }
+    }
+
+    /**
+     * Download an article file
+     * For deprecated OJS 2.x URLs; see https://github.com/pkp/pkp-lib/issues/1541
+     *
+     * @param array $args
+     * @param PKPRequest $request
+     */
+    public function viewFile($args, $request)
+    {
+        $articleId = $args[0] ?? 0;
+        $galleyId = $args[1] ?? 0;
+        $fileId = isset($args[2]) ? (int) $args[2] : 0;
+        header('HTTP/1.1 301 Moved Permanently');
+        $request->redirect(null, null, 'download', [$articleId, $galleyId, $fileId]);
+    }
+
+    /**
+     * Download a supplementary file.
+     * For deprecated OJS 2.x URLs; see https://github.com/pkp/pkp-lib/issues/1541
+     *
+     * @param array $args
+     * @param PKPRequest $request
+     */
+    public function downloadSuppFile($args, $request)
+    {
+        $articleId = $args[0] ?? 0;
+        $article = Repo::submission()->get($articleId);
+        if (!$article) {
+            $dispatcher = $request->getDispatcher();
+            $dispatcher->handle404();
+        }
+        $suppId = $args[1] ?? 0;
+
+        $collector = Repo::submissionFile()
+            ->getCollector()
+            ->filterBySubmissionIds([$article->getId()]);
+
+        $submissionFiles = Repo::submissionFile()->getMany($collector);
+        foreach ($submissionFiles as $submissionFile) {
+            if ($submissionFile->getData('old-supp-id') == $suppId) {
+                $articleGalleys = Repo::galley()->getMany(
+                    Repo::galley()
+                        ->getCollector()
+                        ->filterByPublicationIds([$article->getCurrentPublication()->getId()])
+                );
+                foreach ($articleGalleys as $articleGalley) {
+                    $galleyFile = Repo::submissionFile()->get($articleGalley->getData('submissionFileId'));
+                    if ($galleyFile && $galleyFile->getData('submissionFileId') == $submissionFile->getId()) {
+                        header('HTTP/1.1 301 Moved Permanently');
+                        $request->redirect(null, null, 'download', [$articleId, $articleGalley->getId(), $submissionFile->getId()]);
+                    }
+                }
+            }
+        }
+        $dispatcher = $request->getDispatcher();
+        $dispatcher->handle404();
+    }
+
+    /**
+     * Download an article file
+     *
+     * @param array $args
+     * @param PKPRequest $request
+     */
+    public function download($args, $request)
+    {
+        if (!isset($this->galley)) {
+            $request->getDispatcher()->handle404();
+        }
+        if ($this->galley->getRemoteURL()) {
+            $request->redirectUrl($this->galley->getRemoteURL());
+        } elseif ($this->userCanViewGalley($request, $this->article->getId(), $this->galley->getId())) {
+            if (!$this->fileId) {
+                $this->fileId = $this->galley->getData('submissionFileId');
+            }
+
+            // If no file ID could be determined, treat it as a 404.
+            if (!$this->fileId) {
+                $request->getDispatcher()->handle404();
+            }
+
+            // If the file ID is not the galley's file ID, ensure it is a dependent file, or else 404.
+            if ($this->fileId != $this->galley->getData('submissionFileId')) {
+                $collector = Repo::submissionFile()
+                    ->getCollector()
+                    ->filterByAssoc(
+                        ASSOC_TYPE_SUBMISSION_FILE,
+                        [$this->galley->getData('submissionFileId')]
+                    )
+                    ->filterByFileStages([SubmissionFile::SUBMISSION_FILE_DEPENDENT])
+                    ->includeDependentFiles();
+                $dependentFileIds = Repo::submissionFile()
+                    ->getIds($collector)
+                    ->toArray();
+                if (!in_array($this->fileId, $dependentFileIds)) {
+                    $request->getDispatcher()->handle404();
+                }
+            }
+
+            if (!HookRegistry::call('ArticleHandler::download', [$this->article, &$this->galley, &$this->fileId])) {
+                $submissionFile = Repo::submissionFile()->get($this->fileId);
+
+                if (!Services::get('file')->fs->has($submissionFile->getData('path'))) {
+                    $request->getDispatcher()->handle404();
+                }
+
+                $filename = Services::get('file')->formatFilename($submissionFile->getData('path'), $submissionFile->getLocalizedData('name'));
+
+                $returner = true;
+                HookRegistry::call('FileManager::downloadFileFinished', [&$returner]);
+                Services::get('file')->download($submissionFile->getData('fileId'), $filename);
+            }
+        } else {
+            header('HTTP/1.0 403 Forbidden');
+            echo '403 Forbidden<br>';
+        }
+    }
+
+    /**
+     * Determines whether a user can view this article galley or not.
+     *
+     * @param Request $request
+     * @param string $articleId
+     * @param int|string $galleyId
+     */
+    public function userCanViewGalley($request, $articleId, $galleyId = null)
+    {
+        $issueAction = new IssueAction();
+
+        $context = $request->getContext();
+        $submission = $this->article;
+        $issue = $this->issue;
+        $contextId = $context->getId();
+        $user = $request->getUser();
+        $userId = $user ? $user->getId() : 0;
+
+        // If this is an editorial user who can view unpublished/unscheduled
+        // articles, bypass further validation. Likewise for its author.
+        if ($submission && $issueAction->allowedPrePublicationAccess($context, $submission, $user)) {
+            return true;
+        }
+
+        // Make sure the reader has rights to view the article/issue.
+        if ($issue && $issue->getPublished() && $submission->getStatus() == PKPSubmission::STATUS_PUBLISHED) {
+            $subscriptionRequired = $issueAction->subscriptionRequired($issue, $context);
+            $isSubscribedDomain = $issueAction->subscribedDomain($request, $context, $issue->getId(), $submission->getId());
+
+            // Check if login is required for viewing.
+            if (!$isSubscribedDomain && !Validation::isLoggedIn() && $context->getData('restrictArticleAccess') && isset($galleyId) && $galleyId) {
+                Validation::redirectLogin();
+            }
+
+            // bypass all validation if subscription based on domain or ip is valid
+            // or if the user is just requesting the abstract
+            if ((!$isSubscribedDomain && $subscriptionRequired) && (isset($galleyId) && $galleyId)) {
+
+                // Subscription Access
+                $subscribedUser = $issueAction->subscribedUser($user, $context, $issue->getId(), $submission->getId());
+
+                $paymentManager = Application::get()->getPaymentManager($context);
+
+                $purchasedIssue = false;
+                if (!$subscribedUser && $paymentManager->purchaseIssueEnabled()) {
+                    $completedPaymentDao = DAORegistry::getDAO('OJSCompletedPaymentDAO'); /** @var OJSCompletedPaymentDAO $completedPaymentDao */
+                    $purchasedIssue = $completedPaymentDao->hasPaidPurchaseIssue($userId, $issue->getId());
+                }
+
+                if (!(!$subscriptionRequired || $submission->getCurrentPublication()->getData('accessStatus') == Submission::ARTICLE_ACCESS_OPEN || $subscribedUser || $purchasedIssue)) {
+                    if ($paymentManager->purchaseArticleEnabled() || $paymentManager->membershipEnabled()) {
+                        /* if only pdf files are being restricted, then approve all non-pdf galleys
+                         * and continue checking if it is a pdf galley */
+                        if ($paymentManager->onlyPdfEnabled()) {
+                            if ($this->galley && !$this->galley->isPdfGalley()) {
+                                $this->issue = $issue;
+                                $this->article = $submission;
+                                return true;
+                            }
+                        }
+
+                        if (!Validation::isLoggedIn()) {
+                            Validation::redirectLogin('payment.loginRequired.forArticle');
+                        }
+
+                        /* if the article has been paid for then forget about everything else
+                         * and just let them access the article */
+                        $completedPaymentDao = DAORegistry::getDAO('OJSCompletedPaymentDAO'); /** @var OJSCompletedPaymentDAO $completedPaymentDao */
+                        $dateEndMembership = $user->getSetting('dateEndMembership', 0);
+                        if ($completedPaymentDao->hasPaidPurchaseArticle($userId, $submission->getId())
+                            || (!is_null($dateEndMembership) && $dateEndMembership > time())) {
+                            $this->issue = $issue;
+                            $this->article = $submission;
+                            return true;
+                        } elseif ($paymentManager->purchaseArticleEnabled()) {
+                            $queuedPayment = $paymentManager->createQueuedPayment($request, OJSPaymentManager::PAYMENT_TYPE_PURCHASE_ARTICLE, $user->getId(), $submission->getId(), $context->getData('purchaseArticleFee'));
+                            $paymentManager->queuePayment($queuedPayment);
+
+                            $paymentForm = $paymentManager->getPaymentForm($queuedPayment);
+                            $paymentForm->display($request);
+                            exit;
+                        }
+                    }
+
+                    if (!isset($galleyId) || $galleyId) {
+                        if (!Validation::isLoggedIn()) {
+                            Validation::redirectLogin('reader.subscriptionRequiredLoginText');
+                        }
+                        $request->redirect(null, 'about', 'subscriptions');
+                    }
+                }
+            }
+        } else {
+            $request->redirect(null, 'search');
+        }
+        return true;
+    }
 }
-
-?>

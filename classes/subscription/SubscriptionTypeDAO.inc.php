@@ -3,223 +3,247 @@
 /**
  * @file classes/subscription/SubscriptionTypeDAO.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class SubscriptionTypeDAO
  * @ingroup subscription
+ *
  * @see SubscriptionType
  *
  * @brief Operations for retrieving and modifying SubscriptionType objects.
  */
 
-import('classes.subscription.SubscriptionType');
+namespace APP\subscription;
 
-class SubscriptionTypeDAO extends DAO {
-	/**
-	 * Create a new subscription type.
-	 * @return SubscriptionType
-	 */
-	function newDataObject() {
-		return new SubscriptionType();
-	}
+use PKP\facades\Locale;
+use Illuminate\Support\Facades\DB;
+use PKP\db\DAORegistry;
 
-	/**
-	 * Retrieve a subscription type by ID.
-	 * @param $typeId int
-	 * @param $journalId int optional
-	 * @return SubscriptionType
-	 */
-	function getById($typeId, $journalId = null) {
-		$params = array((int) $typeId);
-		if ($journalId) $params[] = (int) $journalId;
+use PKP\db\DAOResultFactory;
 
-		$result = $this->retrieve(
-			'SELECT * FROM subscription_types WHERE type_id = ?' .
-			($journalId?' AND journal_id = ?':''),
-			$params
-		);
+use PKP\plugins\HookRegistry;
 
-		$returner = null;
-		if ($result->RecordCount() != 0) {
-			$returner = $this->_fromRow($result->GetRowAssoc(false));
-		}
+class SubscriptionTypeDAO extends \PKP\db\DAO
+{
+    /**
+     * Create a new subscription type.
+     *
+     * @return SubscriptionType
+     */
+    public function newDataObject()
+    {
+        return new SubscriptionType();
+    }
 
-		$result->Close();
-		return $returner;
-	}
+    /**
+     * Retrieve a subscription type by ID.
+     *
+     * @param int $typeId
+     * @param int $journalId optional
+     *
+     * @return SubscriptionType
+     */
+    public function getById($typeId, $journalId = null)
+    {
+        $params = [(int) $typeId];
+        if ($journalId) {
+            $params[] = (int) $journalId;
+        }
 
-	/**
-	 * Retrieve subscription type name by ID.
-	 * @param $typeId int
-	 * @return string
-	 */
-	function getSubscriptionTypeName($typeId) {
-		$result = $this->retrieve(
-			'SELECT COALESCE(l.setting_value, p.setting_value) FROM subscription_type_settings l LEFT JOIN subscription_type_settings p ON (p.type_id = ? AND p.setting_name = ? AND p.locale = ?) WHERE l.type_id = ? AND l.setting_name = ? AND l.locale = ?', 
-			array(
-				(int) $typeId, 'name', AppLocale::getLocale(),
-				(int) $typeId, 'name', AppLocale::getPrimaryLocale()
-			)
-		);
+        $result = $this->retrieve(
+            'SELECT * FROM subscription_types WHERE type_id = ?' .
+            ($journalId ? ' AND journal_id = ?' : ''),
+            $params
+        );
+        $row = $result->current();
+        return $row ? $this->_fromRow((array) $row) : null;
+    }
 
-		$returner = isset($result->fields[0]) ? $result->fields[0] : false;
+    /**
+     * Retrieve subscription type name by ID.
+     *
+     * @param int $typeId
+     *
+     * @return string?
+     */
+    public function getSubscriptionTypeName($typeId)
+    {
+        $result = $this->retrieve(
+            'SELECT COALESCE(l.setting_value, p.setting_value) as subscription_type_name FROM subscription_type_settings l LEFT JOIN subscription_type_settings p ON (p.type_id = ? AND p.setting_name = ? AND p.locale = ?) WHERE l.type_id = ? AND l.setting_name = ? AND l.locale = ?',
+            [
+                (int) $typeId, 'name', Locale::getLocale(),
+                (int) $typeId, 'name', Locale::getPrimaryLocale()
+            ]
+        );
+        $row = $result->current();
+        return $row ? $row->subscription_type_name : null;
+    }
 
-		$result->Close();
-		return $returner;
-	}
+    /**
+     * Retrieve institutional flag by ID.
+     *
+     * @param int $typeId
+     *
+     * @return bool
+     */
+    public function getSubscriptionTypeInstitutional($typeId)
+    {
+        $result = $this->retrieve(
+            'SELECT institutional FROM subscription_types WHERE type_id = ?',
+            [(int) $typeId]
+        );
+        $row = $result->current();
+        return $row ? (bool) $row->institutional : false;
+    }
 
-	/**
-	 * Retrieve institutional flag by ID.
-	 * @param $typeId int
-	 * @return int
-	 */
-	function getSubscriptionTypeInstitutional($typeId) {
-		$result = $this->retrieve(
-			'SELECT institutional FROM subscription_types WHERE type_id = ?', (int) $typeId
-		);
+    /**
+     * Retrieve membership flag by ID.
+     *
+     * @param int $typeId
+     *
+     * @return bool
+     */
+    public function getSubscriptionTypeMembership($typeId)
+    {
+        $result = $this->retrieve(
+            'SELECT membership FROM subscription_types WHERE type_id = ?',
+            [(int) $typeId]
+        );
+        $row = $result->current();
+        return $row ? (bool) $row->membership : false;
+    }
 
-		$returner = isset($result->fields[0]) ? $result->fields[0] : false;
+    /**
+     * Retrieve public display flag by ID.
+     *
+     * @param int $typeId
+     *
+     * @return bool
+     */
+    public function getSubscriptionTypeDisablePublicDisplay($typeId)
+    {
+        $result = $this->retrieve(
+            'SELECT disable_public_display FROM subscription_types WHERE type_id = ?',
+            [(int) $typeId]
+        );
+        $row = $result->current();
+        return $row ? (bool) $row->disable_public_display : false;
+    }
 
-		$result->Close();
-		return $returner;
-	}
-
-	/**
-	 * Retrieve membership flag by ID.
-	 * @param $typeId int
-	 * @return int
-	 */
-	function getSubscriptionTypeMembership($typeId) {
-		$result = $this->retrieve(
-			'SELECT membership FROM subscription_types WHERE type_id = ?', (int) $typeId
-		);
-
-		$returner = isset($result->fields[0]) ? $result->fields[0] : false;
-
-		$result->Close();
-		return $returner;
-	}
-
-	/**
-	 * Retrieve public display flag by ID.
-	 * @param $typeId int
-	 * @return int
-	 */
-	function getSubscriptionTypeDisablePublicDisplay($typeId) {
-		$result = $this->retrieve(
-			'SELECT disable_public_display FROM subscription_types WHERE type_id = ?', (int) $typeId
-		);
-
-		$returner = isset($result->fields[0]) ? $result->fields[0] : false;
-
-		$result->Close();
-		return $returner;
-	}
-
-	/**
-	 * Check if a subscription type exists with the given type id for a journal.
-	 * @param $typeId int
-	 * @param $journalId int
-	 * @return boolean
-	 */
-	function subscriptionTypeExistsByTypeId($typeId, $journalId) {
-		$result = $this->retrieve(
-			'SELECT COUNT(*)
+    /**
+     * Check if a subscription type exists with the given type id for a journal.
+     *
+     * @param int $typeId
+     * @param int $journalId
+     *
+     * @return bool
+     */
+    public function subscriptionTypeExistsByTypeId($typeId, $journalId)
+    {
+        $result = $this->retrieve(
+            'SELECT COUNT(*) AS row_count
 				FROM subscription_types
 				WHERE type_id = ?
 				AND   journal_id = ?',
-			array(
-				(int) $typeId,
-				(int) $journalId
-			)
-		);
-		$returner = isset($result->fields[0]) && $result->fields[0] != 0 ? true : false;
+            [(int) $typeId, (int) $journalId]
+        );
+        $row = $result->current();
+        return $row ? (bool) $row->row_count : false;
+    }
 
-		$result->Close();
-		return $returner;
-	}
+    /**
+     * Internal function to return a SubscriptionType object from a row.
+     *
+     * @param array $row
+     *
+     * @return SubscriptionType
+     */
+    public function _fromRow($row)
+    {
+        $subscriptionType = $this->newDataObject();
+        $subscriptionType->setId($row['type_id']);
+        $subscriptionType->setJournalId($row['journal_id']);
+        $subscriptionType->setCost($row['cost']);
+        $subscriptionType->setCurrencyCodeAlpha($row['currency_code_alpha']);
+        $subscriptionType->setDuration($row['duration']);
+        $subscriptionType->setFormat($row['format']);
+        $subscriptionType->setInstitutional($row['institutional']);
+        $subscriptionType->setMembership($row['membership']);
+        $subscriptionType->setDisablePublicDisplay($row['disable_public_display']);
+        $subscriptionType->setSequence($row['seq']);
 
-	/**
-	 * Internal function to return a SubscriptionType object from a row.
-	 * @param $row array
-	 * @return SubscriptionType
-	 */
-	function _fromRow($row) {
-		$subscriptionType = $this->newDataObject();
-		$subscriptionType->setId($row['type_id']);
-		$subscriptionType->setJournalId($row['journal_id']);
-		$subscriptionType->setCost($row['cost']);
-		$subscriptionType->setCurrencyCodeAlpha($row['currency_code_alpha']);
-		$subscriptionType->setDuration($row['duration']);
-		$subscriptionType->setFormat($row['format']);
-		$subscriptionType->setInstitutional($row['institutional']);
-		$subscriptionType->setMembership($row['membership']);
-		$subscriptionType->setDisablePublicDisplay($row['disable_public_display']);
-		$subscriptionType->setSequence($row['seq']);
+        $this->getDataObjectSettings('subscription_type_settings', 'type_id', $row['type_id'], $subscriptionType);
 
-		$this->getDataObjectSettings('subscription_type_settings', 'type_id', $row['type_id'], $subscriptionType);
+        HookRegistry::call('SubscriptionTypeDAO::_fromRow', [&$subscriptionType, &$row]);
 
-		HookRegistry::call('SubscriptionTypeDAO::_fromRow', array(&$subscriptionType, &$row));
+        return $subscriptionType;
+    }
 
-		return $subscriptionType;
-	}
+    /**
+     * Get the list of field names for which localized data is used.
+     *
+     * @return array
+     */
+    public function getLocaleFieldNames()
+    {
+        return ['name', 'description'];
+    }
 
-	/**
-	 * Get the list of field names for which localized data is used.
-	 * @return array
-	 */
-	function getLocaleFieldNames() {
-		return array('name', 'description');
-	}
+    /**
+     * Update the localized settings for this object
+     *
+     * @param object $subscriptionType
+     */
+    public function updateLocaleFields($subscriptionType)
+    {
+        $this->updateDataObjectSettings('subscription_type_settings', $subscriptionType, [
+            'type_id' => $subscriptionType->getId()
+        ]);
+    }
 
-	/**
-	 * Update the localized settings for this object
-	 * @param $subscriptionType object
-	 */
-	function updateLocaleFields($subscriptionType) {
-		$this->updateDataObjectSettings('subscription_type_settings', $subscriptionType, array(
-			'type_id' => $subscriptionType->getId()
-		));
-	}
-
-	/**
-	 * Insert a new SubscriptionType.
-	 * @param $subscriptionType SubscriptionType
-	 * @return int Inserted subscription type ID
-	 */
-	function insertObject($subscriptionType) {
-		$this->update(
-			'INSERT INTO subscription_types
+    /**
+     * Insert a new SubscriptionType.
+     *
+     * @param SubscriptionType $subscriptionType
+     *
+     * @return int Inserted subscription type ID
+     */
+    public function insertObject($subscriptionType)
+    {
+        $this->update(
+            'INSERT INTO subscription_types
 				(journal_id, cost, currency_code_alpha, duration, format, institutional, membership, disable_public_display, seq)
 				VALUES
 				(?, ?, ?, ?, ?, ?, ?, ?, ?)',
-			array(
-				(int) $subscriptionType->getJournalId(),
-				(float) $subscriptionType->getCost(),
-				$subscriptionType->getCurrencyCodeAlpha(),
-				$subscriptionType->getDuration(),
-				$subscriptionType->getFormat(),
-				(int) $subscriptionType->getInstitutional(),
-				$subscriptionType->getMembership(),
-				(int) $subscriptionType->getDisablePublicDisplay(),
-				(float) $subscriptionType->getSequence(),
-			)
-		);
+            [
+                (int) $subscriptionType->getJournalId(),
+                (float) $subscriptionType->getCost(),
+                $subscriptionType->getCurrencyCodeAlpha(),
+                $subscriptionType->getDuration(),
+                $subscriptionType->getFormat(),
+                (int) $subscriptionType->getInstitutional(),
+                $subscriptionType->getMembership(),
+                (int) $subscriptionType->getDisablePublicDisplay(),
+                (float) $subscriptionType->getSequence(),
+            ]
+        );
 
-		$subscriptionType->setId($this->getInsertId());
-		$this->updateLocaleFields($subscriptionType);
-		return $subscriptionType->getId();
-	}
+        $subscriptionType->setId($this->getInsertId());
+        $this->updateLocaleFields($subscriptionType);
+        return $subscriptionType->getId();
+    }
 
-	/**
-	 * Update an existing subscription type.
-	 * @param $subscriptionType SubscriptionType
-	 */
-	function updateObject($subscriptionType) {
-		$this->update(
-			'UPDATE subscription_types
+    /**
+     * Update an existing subscription type.
+     *
+     * @param SubscriptionType $subscriptionType
+     */
+    public function updateObject($subscriptionType)
+    {
+        $this->update(
+            'UPDATE subscription_types
 				SET
 					journal_id = ?,
 					cost = ?,
@@ -231,149 +255,147 @@ class SubscriptionTypeDAO extends DAO {
 					disable_public_display = ?,
 					seq = ?
 				WHERE type_id = ?',
-			array(
-				(int) $subscriptionType->getJournalId(),
-				$subscriptionType->getCost(),
-				$subscriptionType->getCurrencyCodeAlpha(),
-				$subscriptionType->getDuration(),
-				$subscriptionType->getFormat(),
-				(int) $subscriptionType->getInstitutional(),
-				$subscriptionType->getMembership(),
-				(int) $subscriptionType->getDisablePublicDisplay(),
-				(float) $subscriptionType->getSequence(),
-				(int) $subscriptionType->getId(),
-			)
-		);
-		$this->updateLocaleFields($subscriptionType);
-	}
+            [
+                (int) $subscriptionType->getJournalId(),
+                $subscriptionType->getCost(),
+                $subscriptionType->getCurrencyCodeAlpha(),
+                $subscriptionType->getDuration(),
+                $subscriptionType->getFormat(),
+                (int) $subscriptionType->getInstitutional(),
+                $subscriptionType->getMembership(),
+                (int) $subscriptionType->getDisablePublicDisplay(),
+                (float) $subscriptionType->getSequence(),
+                (int) $subscriptionType->getId(),
+            ]
+        );
+        $this->updateLocaleFields($subscriptionType);
+    }
 
-	/**
-	 * Delete a subscription type by ID. Note that all subscriptions with this
-	 * type ID are also deleted.
-	 * @param $typeId int Subscription type ID
-	 * @param $journalId int Optional journal ID
-	 */
-	function deleteById($typeId, $journalId = null) {
-		$subscriptionType = $this->getById($typeId, $journalId);
-		if ($subscriptionType) {
-			$subscriptionDao = DAORegistry::getDAO($subscriptionType->getInstitutional()?'InstitutionalSubscriptionDAO':'IndividualSubscriptionDAO');
-			$subscriptionDao->deleteById($typeId);
-			$this->update('DELETE FROM subscription_types WHERE type_id = ?', (int) $typeId);
-			$this->update('DELETE FROM subscription_type_settings WHERE type_id = ?', (int) $typeId);
-		}
-	}
+    /**
+     * Delete a subscription type by ID. Note that all subscriptions with this
+     * type ID are also deleted.
+     *
+     * @param int $typeId Subscription type ID
+     * @param int $journalId Optional journal ID
+     */
+    public function deleteById($typeId, $journalId = null)
+    {
+        $subscriptionType = $this->getById($typeId, $journalId);
+        if ($subscriptionType) {
+            $subscriptionDao = DAORegistry::getDAO($subscriptionType->getInstitutional() ? 'InstitutionalSubscriptionDAO' : 'IndividualSubscriptionDAO');
+            $subscriptionDao->deleteById($typeId);
+            $this->update('DELETE FROM subscription_types WHERE type_id = ?', [(int) $typeId]);
+            $this->update('DELETE FROM subscription_type_settings WHERE type_id = ?', [(int) $typeId]);
+        }
+    }
 
-	/**
-	 * Delete subscription types by journal ID. Note that all subscriptions with
-	 * corresponding types are also deleted.
-	 * @param $journalId int
-	 */
-	function deleteByJournal($journalId) {
-		$result = $this->retrieve(
-			'SELECT type_id
+    /**
+     * Delete subscription types by journal ID. Note that all subscriptions with
+     * corresponding types are also deleted.
+     *
+     * @param int $journalId
+     */
+    public function deleteByJournal($journalId)
+    {
+        $result = $this->retrieve(
+            'SELECT type_id
 			 FROM   subscription_types
 			 WHERE  journal_id = ?',
-			 (int) $journalId
-		);
-		if ($result->RecordCount() != 0) {
-			while (!$result->EOF && $returner) {
-				$typeId = $result->fields[0];
-				$returner = $this->deleteSubscriptionTypeById($typeId);
-				$result->MoveNext();
-			}
-		}
-		$result->Close();
-	}
+            [(int) $journalId]
+        );
+        foreach ($result as $row) {
+            $typeId = $row->type_id;
+            $this->deleteById($typeId);
+        }
+    }
 
-	/**
-	 * Retrieve subscription types matching a particular journal ID.
-	 * @param $journalId int
-	 * @return object DAOResultFactory containing matching SubscriptionTypes
-	 */
-	function getByJournalId($journalId, $rangeInfo = null) {
-		$result = $this->retrieveRange(
-			'SELECT * FROM subscription_types WHERE journal_id = ? ORDER BY seq',
-			(int) $journalId, $rangeInfo
-		);
+    /**
+     * Retrieve subscription types matching a particular journal ID.
+     *
+     * @param int $journalId
+     * @param null|mixed $rangeInfo
+     *
+     * @return object DAOResultFactory containing matching SubscriptionTypes
+     */
+    public function getByJournalId($journalId, $rangeInfo = null)
+    {
+        $result = $this->retrieveRange(
+            $sql = 'SELECT * FROM subscription_types WHERE journal_id = ? ORDER BY seq',
+            $params = [(int) $journalId],
+            $rangeInfo
+        );
+        return new DAOResultFactory($result, $this, '_fromRow', [], $sql, $params, $rangeInfo); // Counted in subscription type grid paging
+    }
 
-		return new DAOResultFactory($result, $this, '_fromRow');
-	}
-
-	/**
-	 * Retrieve subscription types matching a particular journal ID and institutional flag.
-	 * @param $journalId int
-	 * @param $institutional bool
-	 * @param $disablePublicDisplay bool|null
-	 * @return object DAOResultFactory containing matching SubscriptionTypes
-	 */
-	function getByInstitutional($journalId, $institutional = false, $disablePublicDisplay = null, $rangeInfo = null) {
-		$result = $this->retrieveRange(
-			'SELECT	*
+    /**
+     * Retrieve subscription types matching a particular journal ID and institutional flag.
+     *
+     * @param int $journalId
+     * @param bool $institutional
+     * @param bool|null $disablePublicDisplay
+     * @param null|mixed $rangeInfo
+     *
+     * @return object DAOResultFactory containing matching SubscriptionTypes
+     */
+    public function getByInstitutional($journalId, $institutional = false, $disablePublicDisplay = null, $rangeInfo = null)
+    {
+        $result = $this->retrieveRange(
+            'SELECT	*
 			FROM subscription_types
 			WHERE	journal_id = ?
 				AND institutional = ?
-				' . ($disablePublicDisplaySql===true?'AND disable_public_display = 1':'') . '
-				' . ($disablePublicDisplaySql===false?'AND disable_public_display = 0':'') . '
+				' . ($disablePublicDisplay === true ? 'AND disable_public_display = 1' : '') . '
+				' . ($disablePublicDisplay === false ? 'AND disable_public_display = 0' : '') . '
 			ORDER BY seq',
-			array((int) $journalId, (int) $institutional),
-			$rangeInfo
-		);
+            [(int) $journalId, (int) $institutional],
+            $rangeInfo
+        );
 
-		return new DAOResultFactory($result, $this, '_fromRow');
-	}
+        return new DAOResultFactory($result, $this, '_fromRow');
+    }
 
-	/**
-	 * Check if at least one subscription type exists for a given journal by institutional flag.
-	 * @param $journalId int
-	 * @param $institutional bool
-	 * @return boolean
-	 */
-	function subscriptionTypesExistByInstitutional($journalId, $institutional = false) {
-		$result = $this->retrieve(
-			'SELECT COUNT(*)
-			FROM
-			subscription_types st
-			WHERE st.journal_id = ?
-			AND st.institutional = ?',
-			array((int) $journalId, (int) $institutional)
-		);
-		$returner = isset($result->fields[0]) && $result->fields[0] != 0 ? true : false;
-		$result->Close();
-		return $returner;
-	}
+    /**
+     * Check if at least one subscription type exists for a given journal by institutional flag.
+     *
+     * @param int $journalId
+     * @param bool $institutional
+     *
+     * @return bool
+     */
+    public function subscriptionTypesExistByInstitutional($journalId, $institutional = false)
+    {
+        $result = DB::table('subscription_types')
+            ->where('journal_id', (int) $journalId)
+            ->where('institutional', (int) $institutional)
+            ->first();
 
-	/**
-	 * Get the ID of the last inserted subscription type.
-	 * @return int
-	 */
-	function getInsertId() {
-		return $this->_getInsertId('subscription_types', 'type_id');
-	}
+        return is_null($result) ? false : true;
+    }
 
-	/**
-	 * Sequentially renumber subscription types in their sequence order.
-	 */
-	function resequenceSubscriptionTypes($journalId) {
-		$result = $this->retrieve(
-			'SELECT type_id FROM subscription_types WHERE journal_id = ? ORDER BY seq',
-			(int) $journalId
-		);
+    /**
+     * Get the ID of the last inserted subscription type.
+     *
+     * @return int
+     */
+    public function getInsertId()
+    {
+        return $this->_getInsertId('subscription_types', 'type_id');
+    }
 
-		for ($i=1; !$result->EOF; $i++) {
-			list($subscriptionTypeId) = $result->fields;
-			$this->update(
-				'UPDATE subscription_types SET seq = ? WHERE type_id = ?',
-				array(
-					(int) $i,
-					(int) $subscriptionTypeId
-				)
-			);
+    /**
+     * Sequentially renumber subscription types in their sequence order.
+     */
+    public function resequenceSubscriptionTypes($journalId)
+    {
+        $result = $this->retrieve('SELECT type_id FROM subscription_types WHERE journal_id = ? ORDER BY seq', [(int) $journalId]);
 
-			$result->MoveNext();
-		}
-
-		$result->Close();
-	}
+        for ($i = 1; $row = $result->current(); $i++) {
+            $this->update('UPDATE subscription_types SET seq = ? WHERE type_id = ?', [(int) $i, (int) $row->type_id]);
+            $result->next();
+        }
+    }
 }
 
-?>
+if (!PKP_STRICT_MODE) {
+    class_alias('\APP\subscription\SubscriptionTypeDAO', '\SubscriptionTypeDAO');
+}

@@ -3,9 +3,9 @@
 /**
  * @file classes/submission/form/SubmissionSubmitStep4Form.inc.php
  *
- * Copyright (c) 2014-2017 Simon Fraser University
- * Copyright (c) 2003-2017 John Willinsky
- * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
+ * Copyright (c) 2014-2021 Simon Fraser University
+ * Copyright (c) 2003-2021 John Willinsky
+ * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class SubmissionSubmitStep4Form
  * @ingroup submission_form
@@ -13,104 +13,100 @@
  * @brief Form for Step 4 of author submission.
  */
 
-import('lib.pkp.classes.submission.form.PKPSubmissionSubmitStep4Form');
+namespace APP\submission\form;
 
-class SubmissionSubmitStep4Form extends PKPSubmissionSubmitStep4Form {
-	/**
-	 * Constructor.
-	 * @param $context Context
-	 * @param $submission Submission
-	 */
-	function __construct($context, $submission) {
-		parent::__construct(
-			$context,
-			$submission
-		);
-	}
+use APP\core\Application;
+use APP\log\SubmissionEventLogEntry;
+use APP\mail\ArticleMailTemplate;
 
-	/**
-	 * Save changes to submission.
-	 * @param $args array
-	 * @param $request PKPRequest
-	 * @return int the submission ID
-	 */
-	function execute($args, $request) {
-		parent::execute($args, $request);
+use APP\mail\variables\ContextEmailVariable;
+use APP\notification\NotificationManager;
+use PKP\log\SubmissionLog;
+use PKP\notification\PKPNotification;
+use PKP\submission\form\PKPSubmissionSubmitStep4Form;
 
-		$submission = $this->submission;
-		// Send author notification email
-		import('classes.mail.ArticleMailTemplate');
-		$mail = new ArticleMailTemplate($submission, 'SUBMISSION_ACK', null, null, false);
-		$authorMail = new ArticleMailTemplate($submission, 'SUBMISSION_ACK_NOT_USER', null, null, false);
+class SubmissionSubmitStep4Form extends PKPSubmissionSubmitStep4Form
+{
+    /**
+     * Save changes to submission.
+     *
+     * @return int the submission ID
+     */
+    public function execute(...$functionParams)
+    {
+        parent::execute(...$functionParams);
 
-		$context = $request->getContext();
-		$router = $request->getRouter();
-		if ($mail->isEnabled()) {
-			// submission ack emails should be from the contact.
-			$mail->setFrom($this->context->getSetting('contactEmail'), $this->context->getSetting('contactName'));
-			$authorMail->setFrom($this->context->getSetting('contactEmail'), $this->context->getSetting('contactName'));
+        $submission = $this->submission;
+        // Send author notification email
+        $mail = new ArticleMailTemplate($submission, 'SUBMISSION_ACK', null, null, false);
+        $authorMail = new ArticleMailTemplate($submission, 'SUBMISSION_ACK_NOT_USER', null, null, false);
 
-			$user = $request->getUser();
-			$primaryAuthor = $submission->getPrimaryAuthor();
-			if (!isset($primaryAuthor)) {
-				$authors = $submission->getAuthors();
-				$primaryAuthor = $authors[0];
-			}
-			$mail->addRecipient($user->getEmail(), $user->getFullName());
-			// Add primary contact and e-mail address as specified in the journal submission settings
-			if ($context->getSetting('copySubmissionAckPrimaryContact')) {
-				$mail->addBcc(
-					$context->getSetting('contactEmail'),
-					$context->getSetting('contactName')
-				);
-			}
-			if ($copyAddress = $context->getSetting('copySubmissionAckAddress')) {
-				$mail->addBcc($copyAddress);
-			}
+        $request = Application::get()->getRequest();
+        $context = $request->getContext();
+        $router = $request->getRouter();
+        if ($mail->isEnabled()) {
+            // submission ack emails should be from the contact.
+            $mail->setFrom($this->context->getData('contactEmail'), $this->context->getData('contactName'));
+            $authorMail->setFrom($this->context->getData('contactEmail'), $this->context->getData('contactName'));
 
-			if ($user->getEmail() != $primaryAuthor->getEmail()) {
-				$authorMail->addRecipient($primaryAuthor->getEmail(), $primaryAuthor->getFullName());
-			}
+            $user = $request->getUser();
+            $mail->addRecipient($user->getEmail(), $user->getFullName());
 
-			$assignedAuthors = $submission->getAuthors();
+            // Add primary contact and e-mail addresses as specified in the journal submission settings
+            if ($this->context->getData('copySubmissionAckPrimaryContact')) {
+                $mail->addBcc(
+                    $context->getData('contactEmail'),
+                    $context->getData('contactName')
+                );
+            }
 
-			foreach ($assignedAuthors as $author) {
-				$authorEmail = $author->getEmail();
-				// only add the author email if they have not already been added as the primary author
-				// or user creating the submission.
-				if ($authorEmail != $primaryAuthor->getEmail() && $authorEmail != $user->getEmail()) {
-					$authorMail->addRecipient($author->getEmail(), $author->getFullName());
-				}
-			}
-			$mail->bccAssignedSubEditors($submission->getId(), WORKFLOW_STAGE_ID_SUBMISSION);
+            $submissionAckAddresses = $this->context->getData('copySubmissionAckAddress');
+            if (!empty($submissionAckAddresses)) {
+                $submissionAckAddressArray = explode(',', $submissionAckAddresses);
+                foreach ($submissionAckAddressArray as $submissionAckAddress) {
+                    $mail->addBcc($submissionAckAddress);
+                }
+            }
 
-			$mail->assignParams(array(
-				'authorName' => $user->getFullName(),
-				'authorUsername' => $user->getUsername(),
-				'editorialContactSignature' => $context->getSetting('contactName'),
-				'submissionUrl' => $router->url($request, null, 'authorDashboard', 'submission', $submission->getId()),
-			));
+            $mail->bccAssignedSubEditors($submission->getId(), WORKFLOW_STAGE_ID_SUBMISSION);
 
-			$authorMail->assignParams(array(
-				'submitterName' => $user->getFullName(),
-				'editorialContactSignature' => $context->getSetting('contactName'),
-			));
+            $mail->assignParams([
+                'recipientName' => $user->getFullName(),
+                'recipientUsername' => $user->getUsername(),
+                ContextEmailVariable::CONTEXT_SIGNATURE => $context->getData('contactName'),
+                'authorSubmissionUrl' => $router->url($request, null, 'authorDashboard', 'submission', $submission->getId()),
+            ]);
 
-			$mail->send($request);
+            if (!$mail->send($request)) {
+                $notificationMgr = new NotificationManager();
+                $notificationMgr->createTrivialNotification($request->getUser()->getId(), PKPNotification::NOTIFICATION_TYPE_ERROR, ['contents' => __('email.compose.error')]);
+            }
 
-			$recipients = $authorMail->getRecipients();
-			if (!empty($recipients)) {
-				$authorMail->send($request);
-			}
-		}
+            $authorMail->assignParams([
+                'submitterName' => $user->getFullName(),
+                ContextEmailVariable::CONTEXT_SIGNATURE => $context->getData('contactName'),
+            ]);
 
-		// Log submission.
-		import('classes.log.SubmissionEventLogEntry'); // Constants
-		import('lib.pkp.classes.log.SubmissionLog');
-		SubmissionLog::logEvent($request, $submission, SUBMISSION_LOG_SUBMISSION_SUBMIT, 'submission.event.submissionSubmitted');
+            foreach ($this->emailRecipients as $authorEmailRecipient) {
+                $authorMail->addRecipient($authorEmailRecipient->getEmail(), $authorEmailRecipient->getFullName());
+            }
 
-		return $this->submissionId;
-	}
+            $recipients = $authorMail->getRecipients();
+            if (!empty($recipients)) {
+                if (!$authorMail->send($request)) {
+                    $notificationMgr = new NotificationManager();
+                    $notificationMgr->createTrivialNotification($request->getUser()->getId(), PKPNotification::NOTIFICATION_TYPE_ERROR, ['contents' => __('email.compose.error')]);
+                }
+            }
+        }
+
+        // Log submission.
+        SubmissionLog::logEvent($request, $submission, SubmissionEventLogEntry::SUBMISSION_LOG_SUBMISSION_SUBMIT, 'submission.event.submissionSubmitted');
+
+        return $this->submissionId;
+    }
 }
 
-?>
+if (!PKP_STRICT_MODE) {
+    class_alias('\APP\submission\form\SubmissionSubmitStep4Form', '\SubmissionSubmitStep4Form');
+}
