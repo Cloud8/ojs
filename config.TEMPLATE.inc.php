@@ -29,7 +29,7 @@
 installed = Off
 
 ; The canonical URL to the OJS installation (excluding the trailing slash)
-base_url = "http://pkp.sfu.ca/ojs"
+base_url = "https://pkp.sfu.ca/ojs"
 
 ; Enable strict mode. This will more aggressively cause errors/warnings when
 ; deprecated behaviour exists in the codebase.
@@ -44,6 +44,11 @@ session_cookie_name = OJSSID
 ; Number of days to save login cookie for if user selects to remember
 ; (set to 0 to force expiration at end of current session)
 session_lifetime = 30
+
+; SameSite configuration for the cookie, see possible values and explanations
+; at https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite
+; To set the "Secure" attribute for the cookie see the setting force_ssl at the [security] group
+session_samesite = Lax
 
 ; Enable support for running scheduled tasks
 ; Set this to On if you have set up the scheduled tasks script to
@@ -63,11 +68,6 @@ date_format_long = "F j, Y"
 datetime_format_short = "Y-m-d h:i A"
 datetime_format_long = "F j, Y - h:i A"
 time_format = "h:i A"
-
-; Use URL parameters instead of CGI PATH_INFO. This is useful for broken server
-; setups that don't support the PATH_INFO environment variable.
-; WARNING: This option is DEPRECATED and will be removed in the future.
-disable_path_info = Off
 
 ; Use fopen(...) for URL-based reads. Modern versions of dspace
 ; will not accept requests using fopen, as it does not provide a
@@ -130,7 +130,7 @@ sitewide_privacy_statement = Off
 
 ; The number of days a new user has to validate their account
 ; A new user account will be expired and removed if this many days have passed since the user registered
-; their account, and they have not validated their account or logged in. If the user_validation_period is set to 
+; their account, and they have not validated their account or logged in. If the user_validation_period is set to
 ; 0, unvalidated accounts will never be removed. Use this setting to automatically remove bot registrations.
 user_validation_period = 28
 
@@ -199,7 +199,7 @@ web_cache_hours = 1
 [i18n]
 
 ; Default locale
-locale = en_US
+locale = en
 
 ; Database connection character set
 connection_charset = utf8
@@ -251,7 +251,8 @@ filename_revision_match = 70
 
 [security]
 
-; Force SSL connections site-wide
+; Force SSL connections site-wide and also sets the "Secure" flag for session cookies
+; See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#secure
 force_ssl = Off
 
 ; Force SSL connections for login only
@@ -283,6 +284,10 @@ reset_seconds = 7200
 ; stripped.
 allowed_html = "a[href|target|title],em,strong,cite,code,ul,ol,li[class],dl,dt,dd,b,i,u,img[src|alt],sup,sub,br,p"
 
+; Allowed HTML tags for submission titles only
+; Unspecified attributes will be stripped.
+allowed_title_html = "b,i,u,sup,sub"
+
 ;N.b.: The implicit_auth parameter has been removed in favor of plugin implementations such as shibboleth
 
 ;;;;;;;;;;;;;;;;;;
@@ -292,7 +297,7 @@ allowed_html = "a[href|target|title],em,strong,cite,code,ul,ol,li[class],dl,dt,d
 [email]
 
 ; Default method to send emails
-; Available options: sendmail, smtp, log
+; Available options: sendmail, smtp, log, phpmailer
 default = sendmail
 
 ; Path to the sendmail, -bs argument is for using SMTP protocol
@@ -310,21 +315,9 @@ sendmail_path = "/usr/sbin/sendmail -bs"
 ; smtp_auth = ssl
 ; smtp_username = username
 ; smtp_password = password
-;
-; Supported smtp_authtype: RAM-MD5, LOGIN, PLAIN, XOAUTH2 (see PHPMailer AuthType)
-; (Leave blank to try them in that order)
-; smtp_authtype =
 
-; The following are required for smtp_authtype = XOAUTH2 (e.g. GMail OAuth)
-; (See https://github.com/PHPMailer/PHPMailer/wiki/Using-Gmail-with-XOAUTH2)
-; smtp_oauth_provider = Google
-; smtp_oauth_email =
-; smtp_oauth_clientid =
-; smtp_oauth_clientsecret =
-; smtp_oauth_refreshtoken =
-
-; Enable suppressing verification of SMTP certificate in PHPMailer
-; Note: this is not recommended per PHPMailer documentation
+; Enable suppressing SSL/TLS peer verification by SMTP transports
+; Note: this is not recommended for security reasons
 ; smtp_suppress_cert_check = On
 
 ; Allow envelope sender to be specified
@@ -355,14 +348,6 @@ sendmail_path = "/usr/sbin/sendmail -bs"
 ; You can use '%n' to insert the users name from the original from header
 ; and '%s' to insert the localized sitename.
 ; dmarc_compliant_from_displayname = '%n via %s'
-
-; Amount of time required between attempts to send non-editorial emails
-; in seconds. This can be used to help prevent email relaying via OJS.
-time_between_emails = 3600
-
-; Maximum number of recipients that can be included in a single email
-; (either as To:, Cc:, or Bcc: addresses) for a non-privileged user
-max_recipients = 10
 
 ; If enabled, email addresses must be validated before login is possible.
 require_validation = Off
@@ -414,7 +399,8 @@ results_per_keyword = 500
 ; Enable OAI front-end to the site
 oai = On
 
-; OAI Repository identifier
+; OAI Repository identifier. This setting forms part of OAI-PMH record IDs.
+; Changing this setting may affect existing clients and is not recommended.
 repository_id = ojs.pkp.sfu.ca
 
 ; Maximum number of records per request to serve via OAI
@@ -528,8 +514,59 @@ default_connection = "database"
 ; Default queue to use when a job is added to the queue
 default_queue = "queue"
 
-; Do not run jobs on shutdown
-; By default, jobs in the queue will be run during PHP's shutdown
-; function. Disable this if you want to run jobs through a separate
-; cron job or workers.
-disable_jobs_run_at_shutdown = Off
+; Whether or not to turn on the built-in job runner
+;
+; When enabled, jobs will be processed at the end of each web
+; request to the application.
+;
+; Use of the built-in job runner is highly discouraged for high-volume
+; sites. Instead, a worker daemon or cron job should be configured
+; to process jobs off the application's main thread.
+;
+; See: https://docs.pkp.sfu.ca/admin-guide/en/deploy-jobs
+;
+job_runner = On
+
+; The maximum number of jobs to run in a single request when using
+; the built-in job runner.
+job_runner_max_jobs = 30
+
+; The maximum number of seconds the built-in job runner should spend
+; running jobs in a single request.
+;
+; This should be less than the max_execution_time the server has
+; configured for PHP.
+;
+; Lower this setting if jobs are failing due to timeouts.
+job_runner_max_execution_time = 30
+
+; The maximum consumerable memory that should be spent by the built-in
+; job runner when running jobs.
+;
+; Set as a percentage, such as 80%:
+;
+; job_runner_max_memory = 80
+;
+; Or set as a fixed value in megabytes:
+;
+; job_runner_max_memory = 128M
+;
+; When setting a fixed value in megabytes, this should be less than the
+; memory_limit the server has configured for PHP.
+job_runner_max_memory = 80
+
+; Remove failed jobs from the database after the following number of days.
+; Remove this setting to leave failed jobs in the database.
+delete_failed_jobs_after = 180
+
+[invitations]
+expiration_days = 3
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+; New Features Settings ;
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+[features]
+
+enable_new_submission_listing = Off
+

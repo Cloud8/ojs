@@ -8,12 +8,13 @@
  * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @class runScheduledTasks
+ *
  * @ingroup tools
  *
  * @brief CLI tool to execute a set of scheduled tasks.
  */
 
-require(dirname(__FILE__) . '/bootstrap.inc.php');
+require(dirname(__FILE__) . '/bootstrap.php');
 
 class runScheduledTasks extends \PKP\cliTool\ScheduledTaskTool
 {

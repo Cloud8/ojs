@@ -6,6 +6,8 @@
  * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * Display the workflow tab structure.
+ *
+ * @hook Template::Workflow::Publication []
  *}
 {extends file="layouts/backend.tpl"}
 
@@ -33,23 +35,15 @@
 			>
 				{translate key="common.declined"}
 			</badge>
-			<span class="pkpWorkflow__identificationId">{{ submission.id }}</span>
-			<span class="pkpWorkflow__identificationDivider">/</span>
-			<span class="pkpWorkflow__identificationAuthor">
-				{{ currentPublication.authorsStringShort }}
-			</span>
-			<span class="pkpWorkflow__identificationDivider">/</span>
-			<span class="pkpWorkflow__identificationTitle">
-				{{ localizeSubmission(currentPublication.fullTitle, currentPublication.locale) }}
-			</span>
+			{include file="workflow/submissionIdentification.tpl"}
 		</h1>
-		<template slot="actions">
+		<template #actions>
 			<pkp-button
 				v-if="submission.status === getConstant('STATUS_PUBLISHED')"
 				element="a"
 				:href="submission.urlPublished"
 			>
-				{{ __('common.view') }}
+				{{ t('common.view') }}
 			</pkp-button>
 			<pkp-button
 				v-else-if="submission.status !== getConstant('STATUS_PUBLISHED') && submission.stageId >= getConstant('WORKFLOW_STAGE_ID_EDITING')"
@@ -101,18 +95,22 @@
 
 			{* Modal to select one of the revision decisions *}
 			<modal
-				:close-label="__('common.close')"
+				:close-label="t('common.close')"
 				name="selectRevisionDecision"
 				title="Revisions"
+				:open="isModalOpenedSelectRevisionDecision"
+				@close="isModalOpenedSelectRevisionDecision = false"
 			>
 				<pkp-form v-bind="components.{$smarty.const.FORM_SELECT_REVISION_DECISION}" @set="set" @success="goToRevisionDecision" />
 			</modal>
 
 			{* Modal to select one of the revision recommendations *}
 			<modal
-				:close-label="__('common.close')"
+				:close-label="t('common.close')"
 				name="selectRevisionRecommendation"
 				title="Revisions"
+				:open="isModalOpenedSelectRevisionRecommendation"
+				@close="isModalOpenedSelectRevisionRecommendation = false"
 			>
 				<pkp-form v-bind="components.{$smarty.const.FORM_SELECT_REVISION_RECOMMENDATION}" @set="set" @success="goToRevisionDecision" />
 			</modal>
@@ -155,7 +153,7 @@
 							</dropdown>
 						</span>
 						{if $canPublish}
-							<template slot="actions">
+							<template #actions>
 								<pkp-button
 									v-if="workingPublication.status !== getConstant('STATUS_PUBLISHED') && submission.stageId >= getConstant('WORKFLOW_STAGE_ID_EDITING')"
 									element="a"
@@ -229,6 +227,15 @@
 								<pkp-form v-bind="components.{$smarty.const.FORM_PUBLICATION_IDENTIFIERS}" @set="set" />
 							</tab>
 						{/if}
+						<tab id="jats" label="{translate key="publication.jats"}">
+							<publication-section-jats
+								v-bind="components.jats"
+								class="pkpWorkflow__jats"
+								@set="set"
+								:publication="workingPublication"
+								:publication-api-url="submissionApiUrl + '/publications/' + workingPublication.id"
+							></publication-section-jats>
+						</tab>
 						{if $canAccessProduction}
 							<tab id="galleys" label="{translate key="submission.layout.galleys"}">
 								<div id="representations-grid" ref="representations">

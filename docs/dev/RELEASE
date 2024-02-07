@@ -11,6 +11,7 @@ OJS release:
     dbscripts/xml/install.xml
     dbscripts/xml/upgrade.xml
     package.json (and package-lock.json, using `npm install`)
+    lib/ui-library/package.json (and lib/ui-library/package-lock.json, using `npm install`)
 
     Commands that may be helpful in determining what bugs have been closed
     since the last release (whose tag is specified in place of <last-tag>:
@@ -35,17 +36,11 @@ OJS release:
 
 2. Update release documentation:
 
-    docs/README.md
     docs/release-notes/README-<VERSION>
-    SECURITY.md
+    php lib/pkp/tools/getHooks.php -r > docs/dev/guide/hooks.rst
 
 
-3. Copy the current release notes to docs/:
-
-    cp docs/release-notes/README-<VERSION> docs/RELEASE
-
-
-4. After committing any pending modifications, tag the release in git (both the
+3. After committing any pending modifications, tag the release in git (both the
 OJS codebase and the PKP library to be distributed with it). DO NOT FORGET TO
 COMMIT THE lib/pkp HASH FIRST.
 
@@ -60,7 +55,7 @@ config.TEMPLATE.inc.php and compile and commit the latest JS before tagging!
     git push --tags
 
 
-5. Build the OJS package and patch files:
+4. Build the OJS package and patch files:
 
 WARNING: If working on a stable branch, the latest `js/build.js` file will be
 compiled when `tools/buildpkg.sh` is run. Remove js/build.js from the .gitignore
@@ -72,7 +67,7 @@ file and commit it to the new stable branch.
     packages against which to build patches)
 
 
-6. Place the new package, patches, version descriptor, and Doxygen docs on the
+5. Place the new package, patches, version descriptor, and Doxygen docs on the
     OJS web site:
 
     https://pkp.sfu.ca/ojs/ojs_download/
@@ -80,10 +75,21 @@ file and commit it to the new stable branch.
     https://pkp.sfu.ca/ojs/xml/ojs-version.xml
     https://pkp.sfu.ca/ojs/doxygen/master/html/
 
-7. Place the release notes, upgrade instructions, readme, and any relevant DTDs
+6. Place the release notes, upgrade instructions, readme, and any relevant DTDs
     on the OJS website:
 
     https://pkp.sfu.ca/ojs/README-<VERSION>
     https://pkp.sfu.ca/ojs/RELEASE-<VERSION>
     https://pkp.sfu.ca/ojs/UPGRADE-<VERSION>
     https://pkp.sfu.ca/ojs/dtds
+
+7. If this is a major release, update the Release Notebook to include the release
+    date. Example:
+
+    OJS, OMP and OPS version 3.4 was released on DD, Month, YYYY.
+
+8. When a stable branch is created for a major release, update the Admin Guide
+    with a permalink to the sample XML import file that points to the file in
+    the stable branch. Example:
+
+    https://github.com/pkp/pkp-docs/blob/325461a5b7dcefc1477f18a25ca84027e38b302a/admin-guide/en/data-import-and-export.md?plain=1#L39-L42

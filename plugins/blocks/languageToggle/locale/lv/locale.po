@@ -1,8 +1,8 @@
-# Gints Buda <gints.buda@gmail.com>, 2022.
+# Ieva Tiltina <pastala@gmail.com>, 2023.
 msgid ""
 msgstr ""
-"PO-Revision-Date: 2022-03-04 13:59+0000\n"
-"Last-Translator: Gints Buda <gints.buda@gmail.com>\n"
+"PO-Revision-Date: 2023-09-19 08:43+0000\n"
+"Last-Translator: Ieva Tiltina <pastala@gmail.com>\n"
 "Language-Team: Latvian <http://translate.pkp.sfu.ca/projects/ojs/"
 "blocks-languageToggle/lv/>\n"
 "Language: lv\n"
@@ -11,10 +11,10 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n % 10 == 0 || n % 100 >= 11 && n % 100 <= "
 "19) ? 0 : ((n % 10 == 1 && n % 100 != 11) ? 1 : 2);\n"
-"X-Generator: Weblate 3.9.1\n"
-
-msgid "plugins.block.languageToggle.description"
-msgstr "Šis spraudnis nodrošina valodas pārslēdzēja sānu rīkjoslu."
+"X-Generator: Weblate 4.13.1\n"
 
 msgid "plugins.block.languageToggle.displayName"
-msgstr "Valodas Pārslēgšanas Bloks"
+msgstr "Valodas pārslēgšanas bloks"
+
+msgid "plugins.block.languageToggle.description"
+msgstr "Šis spraudnis pievieno valodas pārslēdzēju sānjoslā ."

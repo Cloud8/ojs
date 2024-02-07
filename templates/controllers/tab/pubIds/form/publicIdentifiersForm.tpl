@@ -5,6 +5,7 @@
  * Copyright (c) 2003-2021 John Willinsky
  * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
+ * @hook Templates::Controllers::Tab::PubIds::Form::PublicIdentifiersForm []
  *}
 <script>
 	$(function() {ldelim}
@@ -43,16 +44,16 @@
 {*include file="common/formErrors.tpl"*}
 {if $enablePublisherId}
 	{fbvFormSection}
-		{fbvElement type="text" label="submission.publisherId" id="publisherId" name="publisherId" value=$publisherId size=$fbvStyles.size.MEDIUM}
+		{fbvElement type="text" label="submission.publisherId" id="publisherId" name="publisherId" value=$publisherId size=$fbvStyles.size.MEDIUM disabled=$formDisabled}
 	{/fbvFormSection}
 {/if}
 
 {foreach from=$pubIdPlugins item=pubIdPlugin}
 	{assign var=pubIdMetadataFile value=$pubIdPlugin->getPubIdMetadataFile()}
 	{assign var=canBeAssigned value=$pubIdPlugin->canBeAssigned($pubObject)}
-	{include file="$pubIdMetadataFile" pubObject=$pubObject canBeAssigned=$canBeAssigned}
+	{include file="$pubIdMetadataFile" pubObject=$pubObject canBeAssigned=$canBeAssigned formDisabled=$formDisabled}
 {/foreach}
 {call_hook name="Templates::Controllers::Tab::PubIds::Form::PublicIdentifiersForm"}
-{fbvFormButtons id="publicIdentifiersFormSubmit" submitText="common.save"}
+{fbvFormButtons id="publicIdentifiersFormSubmit" submitText="common.save" submitDisabled=$formDisabled hideCancel=$formDisabled}
 
 </form>

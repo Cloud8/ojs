@@ -15,6 +15,9 @@
  *  Value is a single string: YYYY-MM-DD HH:MM:SS
  * @uses $yearStart Earliest year that can be used in from/to filters
  * @uses $yearEnd Latest year that can be used in from/to filters
+ *
+ * @hook Templates::Search::SearchResults::AdditionalFilters []
+ * @hook Templates::Search::SearchResults::PreResults []
  *}
 {include file="frontend/components/header.tpl" pageTitle="common.search"}
 
@@ -31,8 +34,8 @@
 
 	{capture name="searchFormUrl"}{url escape=false}{/capture}
 	{assign var=formUrlParameters value=[]}{* Prevent Smarty warning *}
-	{$smarty.capture.searchFormUrl|parse_url:$smarty.const.PHP_URL_QUERY|parse_str:$formUrlParameters}
-	<form class="cmp_form" method="get" action="{$smarty.capture.searchFormUrl|strtok:"?"|escape}">
+	{$smarty.capture.searchFormUrl|parse_url:$smarty.const.PHP_URL_QUERY|default:""|parse_str:$formUrlParameters}
+	<form class="cmp_form" method="get" action="{$smarty.capture.searchFormUrl|strtok:"?"|escape}" role="form">
 		{foreach from=$formUrlParameters key=paramKey item=paramValue}
 			<input type="hidden" name="{$paramKey|escape}" value="{$paramValue|escape}"/>
 		{/foreach}
@@ -69,6 +72,20 @@
 				{block name=searchAuthors}
 					<input type="text" id="authors" name="authors" value="{$authors|escape}">
 				{/block}
+
+				{if $searchableContexts}
+					<label class="label label_contexts" for="searchJournal">
+						{translate key="search.journal"}
+					</label>
+					<select name="searchJournal" id="searchJournal">
+						<option></option>
+						{foreach from=$searchableContexts item="searchableContext"}
+							<option value="{$searchableContext->id}" {if $searchJournal == $searchableContext->id}selected{/if}>
+								{$searchableContext->name|escape}
+							</option>
+						{/foreach}
+					</select>
+				{/if}
 			</div>
 			{call_hook name="Templates::Search::SearchResults::AdditionalFilters"}
 		</fieldset>

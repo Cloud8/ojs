@@ -12,9 +12,9 @@
  * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @ingroup pages_decision
+ *
  * @brief Handle requests to take an editorial decision
  *
  */
 
-define('HANDLER_CLASS', 'DecisionHandler');
-import('lib.pkp.pages.decision.DecisionHandler');
+return new PKP\pages\decision\DecisionHandler();

@@ -4,11 +4,12 @@
 
 | Version | Supported                                             | End Of Life   |
 | ------- | ----------------------------------------------------- | ------------- |
-| 3.4.x   | :heavy_check_mark: Active development                 |               |
-| 3.3.x   | :heavy_check_mark: Active maintenance                 |               |
-| 3.2.x   | :white_check_mark: Security only                      |               |
-| 3.1.x   | :white_check_mark: Security only; upgrade recommended |               |
-| 3.0.x   | :white_check_mark: Security only; upgrade recommended |               |
+| 3.5.x   | :x: Pre-release                                       | 2026 (est)    |
+| 3.4.x   | :heavy_check_mark: Active development                 | 2025 (est)    |
+| 3.3.x   | :heavy_check_mark: Active maintenance                 | 2026 (est)    |
+| 3.2.x   | :x: Not supported                                     | 2023          |
+| 3.1.x   | :x: Not supported                                     | 2022          |
+| 3.0.x   | :x: Not supported                                     | 2022          |
 | 2.x     | :x: Not supported                                     | 2021          |
 | 1.x     | :x: Not supported                                     | 2005 (approx) |
 
@@ -22,7 +23,7 @@ PKP will then work to verify the vulnerability and assess the risk. This is typi
 
 When a fix is available, PKP will contact its user community privately via mailing list with details of the fix, and leave a window of typically 2 weeks for community members to patch or upgrade before public disclosure.
 
-PKP then discloses the vulnerability publicly by updating the Github issue entry with complete details and adding a notice about the vulnerability to the software download page (e.g. https://pkp.sfu.ca/ojs_download). At this point, a CVE and credit for the discovery may be added to the entry.
+PKP then discloses the vulnerability publicly by updating the Github issue entry with complete details and adding a notice about the vulnerability to the software download page (e.g. https://pkp.sfu.ca/software/ojs). At this point, a CVE and credit for the discovery may be added to the entry.
 
 Depending on the severity of the issue PKP may back-port fixes to releases that are beyond the formal software end-of-life.
 

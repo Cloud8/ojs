@@ -11,13 +11,12 @@
  * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * @ingroup pages_doiManagement
+ *
  * @brief Handle requests for DOI management functions.
  *
  */
 
 switch ($op) {
     case 'index':
-        define('HANDLER_CLASS', 'DoisHandler');
-        import('pages.dois.DoisHandler');
-        break;
+        return new APP\pages\dois\DoisHandler();
 }

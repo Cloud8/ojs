@@ -1,0 +1,9 @@
+{
+	"compilerOptions": {
+		"baseUrl": ".",
+		"paths": {
+			"@/components/*": ["lib/ui-library/src/components/*"]
+		}
+	},
+	"exclude": ["node_modules"]
+}

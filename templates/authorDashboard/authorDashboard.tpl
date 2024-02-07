@@ -6,6 +6,9 @@
  * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
  *
  * Display the author dashboard.
+ *
+ * @hook Template::Workflow::Publication []
+ * @hook Template::Workflow []
  *}
 {extends file="layouts/backend.tpl"}
 
@@ -13,17 +16,9 @@
 	<div class="pkpWorkflow">
 		<pkp-header class="pkpWorkflow__header">
 			<h1 class="pkpWorkflow__identification">
-				<span class="pkpWorkflow__identificationId">{{ submission.id }}</span>
-				<span class="pkpWorkflow__identificationDivider">/</span>
-				<span class="pkpWorkflow__identificationAuthor">
-					{{ currentPublication.authorsStringShort }}
-				</span>
-				<span class="pkpWorkflow__identificationDivider">/</span>
-				<span class="pkpWorkflow__identificationTitle">
-					{{ localizeSubmission(currentPublication.title, currentPublication.locale) }}
-				</span>
+				{include file="workflow/submissionIdentification.tpl"}
 			</h1>
-			<template slot="actions">
+			<template #actions>
 				<pkp-button
 					v-if="uploadFileUrl"
 					ref="uploadFileButton"
