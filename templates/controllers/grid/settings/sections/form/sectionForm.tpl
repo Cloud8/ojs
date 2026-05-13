@@ -17,7 +17,7 @@
 	{rdelim});
 </script>
 
-<form class="pkp_form" id="sectionForm" method="post" action="{url router=\PKP\core\PKPApplication::ROUTE_COMPONENT component="grid.settings.sections.SectionGridHandler" op="updateSection" sectionId=$sectionId}">
+<form class="pkp_form" id="sectionForm" method="post" action="{url router=PKP\core\PKPApplication::ROUTE_COMPONENT component="grid.settings.sections.SectionGridHandler" op="updateSection" sectionId=$sectionId}">
 	{csrf}
 	<input type="hidden" name="sectionId" value="{$sectionId|default:""|escape}"/>
 
@@ -67,8 +67,8 @@
 	{fbvFormSection list=true title="manager.sections.form.assignEditors"}
 	<div>{translate key="manager.sections.form.assignEditors.description"}</div>
 	{foreach from=$assignableUserGroups item="assignableUserGroup"}
-		{assign var="role" value=$assignableUserGroup.userGroup->getLocalizedName()}
-		{assign var="userGroupId" value=$assignableUserGroup.userGroup->getId()}
+		{assign var="role" value=$assignableUserGroup.userGroup->getLocalizedData('name')}
+		{assign var="userGroupId" value=$assignableUserGroup.userGroup->id}
 		{foreach from=$assignableUserGroup.users item=$username key="id"}
 			{fbvElement
 				type="checkbox"

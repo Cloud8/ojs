@@ -333,12 +333,6 @@ msgstr ""
 msgid "manager.setup"
 msgstr ""
 
-msgid "manager.setup.masthead"
-msgstr ""
-
-msgid "manager.setup.editorialTeam"
-msgstr ""
-
 msgid "manager.setup.homepageContent"
 msgstr ""
 
@@ -636,12 +630,6 @@ msgstr ""
 msgid "manager.setup.contextTitle"
 msgstr ""
 
-msgid "manager.setup.keyInfo"
-msgstr ""
-
-msgid "manager.setup.keyInfo.description"
-msgstr ""
-
 msgid "manager.setup.labelName"
 msgstr ""
 
@@ -669,9 +657,6 @@ msgstr ""
 msgid "manager.setup.lockssEnable"
 msgstr ""
 
-msgid "manager.setup.lockssLicenseDescription"
-msgstr ""
-
 msgid "manager.setup.lockssLicenseLabel"
 msgstr ""
 
@@ -682,9 +667,6 @@ msgid "manager.setup.lockssTitle"
 msgstr ""
 
 msgid "manager.setup.clockssEnable"
-msgstr ""
-
-msgid "manager.setup.clockssLicenseDescription"
 msgstr ""
 
 msgid "manager.setup.clockssLicenseLabel"
@@ -1615,9 +1597,6 @@ msgstr ""
 msgid "plugins.importexport.common.settings.form.password"
 msgstr ""
 
-msgid "plugins.importexport.common.settings.form.password.description"
-msgstr ""
-
 msgid "plugins.importexport.common.filter.issue"
 msgstr ""
 
@@ -1643,9 +1622,6 @@ msgid "plugins.importexport.common.action.markRegistered"
 msgstr ""
 
 msgid "plugins.importexport.common.action.register"
-msgstr ""
-
-msgid "plugins.importexport.common.validation"
 msgstr ""
 
 msgid "plugins.importexport.common.error.noObjectsSelected"

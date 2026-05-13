@@ -1586,12 +1586,6 @@ msgstr "Um tímaritið"
 msgid "about.history"
 msgstr "Saga tímaritsins"
 
-msgid "about.editorialTeam"
-msgstr "Ritstjórnarteymi"
-
-msgid "about.editorialTeam.biography"
-msgstr "Ágrip (bio)"
-
 msgid "about.editorialPolicies"
 msgstr "Ritstjórnarstefna"
 
@@ -2198,9 +2192,6 @@ msgstr "<p>Fjarlægja samþykki á þessu galley.</p>"
 
 msgid "search.cli.rebuildIndex.indexing"
 msgstr "Lyklun \"{$journalName}\""
-
-msgid "search.cli.rebuildIndex.indexingByJournalNotSupported"
-msgstr "Uppsetning á þessari leit leyfir ekki endurlykklun per tímarit."
 
 msgid "search.cli.rebuildIndex.unknownJournal"
 msgstr "Uppgefin slóð fyrir tímarit \"{$journalPath}\" sýnir ekkert tímarit."

@@ -20,13 +20,14 @@ namespace APP\API\v1\issues;
 use APP\core\Application;
 use APP\facades\Repo;
 use APP\issue\Collector;
+use APP\issue\enums\IssueAssignment;
 use APP\security\authorization\OjsIssueRequiredPolicy;
 use APP\security\authorization\OjsJournalMustPublishPolicy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\LazyCollection;
 use PKP\core\PKPBaseController;
 use PKP\core\PKPRequest;
 use PKP\db\DAORegistry;
@@ -36,6 +37,7 @@ use PKP\security\authorization\ContextRequiredPolicy;
 use PKP\security\authorization\UserRolesRequiredPolicy;
 use PKP\security\Role;
 use PKP\submission\GenreDAO;
+use PKP\userGroup\UserGroup;
 
 class IssueController extends PKPBaseController
 {
@@ -85,6 +87,9 @@ class IssueController extends PKPBaseController
         Route::get('{issueId}', $this->get(...))
             ->name('issue.getIssue')
             ->whereNumber('issueId');
+
+        Route::get('assignmentOptions', $this->getAssignmentOptions(...))
+            ->name('issue.getAssignmentOptions');
     }
 
     /**
@@ -164,7 +169,7 @@ class IssueController extends PKPBaseController
                     } elseif (!is_array($val)) {
                         $val = [$val];
                     }
-                    $values = array_map('intval', $val);
+                    $values = array_map(intval(...), $val);
                     switch ($param) {
                         case 'volumes':
                             $collector->filterByVolumes($values);
@@ -187,7 +192,7 @@ class IssueController extends PKPBaseController
                     $collector->searchPhrase($val);
                     break;
                 case 'doiStatus':
-                    $collector->filterByDoiStatuses(array_map('intval', paramToArray($val)));
+                    $collector->filterByDoiStatuses(array_map(intval(...), paramToArray($val)));
                     break;
                 case 'hasDois':
                     $collector->filterByHasDois((bool) $val, $context->getEnabledDoiTypes());
@@ -199,7 +204,7 @@ class IssueController extends PKPBaseController
         Hook::call('API::issues::params', [&$collector, $illuminateRequest]);
 
         // You must be a manager or site admin to access unpublished Issues
-        $isAdmin = $currentUser->hasRole([Role::ROLE_ID_MANAGER], $context->getId()) || $currentUser->hasRole([Role::ROLE_ID_SITE_ADMIN], \PKP\core\PKPApplication::CONTEXT_SITE);
+        $isAdmin = $currentUser->hasRole([Role::ROLE_ID_MANAGER], $context->getId()) || $currentUser->hasRole([Role::ROLE_ID_SITE_ADMIN], \PKP\core\PKPApplication::SITE_CONTEXT_ID);
         if (isset($collector->isPublished) && !$collector->isPublished && !$isAdmin) {
             return response()->json([
                 'error' => __('api.submissions.403.unpublishedIssues'),
@@ -212,7 +217,7 @@ class IssueController extends PKPBaseController
 
         return response()->json([
             'items' => Repo::issue()->getSchemaMap()->summarizeMany($issues, $context)->values(),
-            'itemsMax' => $collector->limit(null)->offset(null)->getCount(),
+            'itemsMax' => $collector->getCount(),
         ], Response::HTTP_OK);
     }
 
@@ -266,16 +271,23 @@ class IssueController extends PKPBaseController
         return response()->json($data, Response::HTTP_OK);
     }
 
-    protected function getUserGroups(int $contextId): LazyCollection
+    /**
+     * Get issue assignment options
+     */
+    public function getAssignmentOptions(Request $illuminateRequest): JsonResponse
     {
-        return Repo::userGroup()->getCollector()
-            ->filterByContextIds([$contextId])
-            ->getMany();
+        $options = IssueAssignment::getAvailableAssignmentOption($this->getRequest()->getContext());
+        return response()->json($options, Response::HTTP_OK);
+    }
+
+    protected function getUserGroups(int $contextId): Collection
+    {
+        return UserGroup::withContextIds([$contextId])->get();
     }
 
     protected function getGenres(int $contextId): array
     {
         $genreDao = DAORegistry::getDAO('GenreDAO'); /** @var GenreDAO $genreDao */
-        return $genreDao->getByContextId($contextId)->toArray();
+        return $genreDao->getByContextId($contextId)->toAssociativeArray();
     }
 }

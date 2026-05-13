@@ -18,7 +18,6 @@
 namespace APP\API\v1\stats\issues;
 
 use APP\core\Application;
-use APP\core\Services;
 use APP\facades\Repo;
 use APP\security\authorization\OjsIssueRequiredPolicy;
 use APP\statistics\StatisticsHelper;
@@ -57,6 +56,7 @@ class StatsIssueController extends PKPBaseController
             self::roleAuthorizer([
                 Role::ROLE_ID_SITE_ADMIN,
                 Role::ROLE_ID_MANAGER,
+                Role::ROLE_ID_SUB_EDITOR,
             ]),
         ];
     }
@@ -160,7 +160,7 @@ class StatsIssueController extends PKPBaseController
             if (empty($allowedParams['issueIds'])) {
                 $csvColumnNames = $this->_getIssueReportColumnNames();
                 if ($responseCSV) {
-                    return response()->withCSV([], $csvColumnNames, 0);
+                    return response()->withFile([], $csvColumnNames, 0);
                 } else {
                     return response()->json([
                         'items' => [],
@@ -171,7 +171,7 @@ class StatsIssueController extends PKPBaseController
         }
 
         // Get a list (count number) of top issues by total (toc + galley) views
-        $statsService = Services::get('issueStats'); /** @var \APP\services\StatsIssueService $statsService */
+        $statsService = app()->get('issueStats'); /** @var \APP\services\StatsIssueService $statsService */
         $totalMetrics = $statsService->getTotals($allowedParams);
 
         // Get the stats for each issue
@@ -192,7 +192,7 @@ class StatsIssueController extends PKPBaseController
         $itemsMax = $statsService->getCount($allowedParams);
         $csvColumnNames = $this->_getIssueReportColumnNames();
         if ($responseCSV) {
-            return response()->withCSV($items, $csvColumnNames, $itemsMax);
+            return response()->withFile($items, $csvColumnNames, $itemsMax);
         } else {
             return response()->json([
                 'items' => $items,
@@ -246,7 +246,7 @@ class StatsIssueController extends PKPBaseController
             $allowedParams['assocTypes'] = [Application::ASSOC_TYPE_ISSUE_GALLEY];
         };
 
-        $statsService = Services::get('issueStats'); /** @var \APP\services\StatsIssueService $statsService */
+        $statsService = app()->get('issueStats'); /** @var \APP\services\StatsIssueService $statsService */
 
         // Identify issues which should be included in the results when a searchPhrase is passed
         if (!empty($allowedParams['searchPhrase'])) {
@@ -259,7 +259,7 @@ class StatsIssueController extends PKPBaseController
                 $emptyTimeline = $statsService->getEmptyTimelineIntervals($dateStart, $dateEnd, $allowedParams['timelineInterval']);
                 if ($responseCSV) {
                     $csvColumnNames = $statsService->getTimelineReportColumnNames();
-                    return response()->withCSV($emptyTimeline, $csvColumnNames, 0);
+                    return response()->withFile($emptyTimeline, $csvColumnNames, 0);
                 }
                 return response()->json($emptyTimeline, Response::HTTP_OK);
             }
@@ -268,7 +268,7 @@ class StatsIssueController extends PKPBaseController
         $data = $statsService->getTimeline($allowedParams['timelineInterval'], $allowedParams);
         if ($responseCSV) {
             $csvColumnNames = $statsService->getTimelineReportColumnNames();
-            return response()->withCSV($data, $csvColumnNames, count($data));
+            return response()->withFile($data, $csvColumnNames, count($data));
         }
 
         return response()->json($data, Response::HTTP_OK);
@@ -297,7 +297,7 @@ class StatsIssueController extends PKPBaseController
             return response()->json(['error' => $result], Response::HTTP_BAD_REQUEST);
         }
 
-        $statsService = Services::get('issueStats'); /** @var \APP\services\StatsIssueService $statsService */
+        $statsService = app()->get('issueStats'); /** @var \APP\services\StatsIssueService $statsService */
         $dateStart = array_key_exists('dateStart', $allowedParams) ? $allowedParams['dateStart'] : null;
         $dateEnd = array_key_exists('dateEnd', $allowedParams) ? $allowedParams['dateEnd'] : null;
         $metricsByType = $statsService->getTotalsByType($issue->getId(), $request->getContext()->getId(), $dateStart, $dateEnd);
@@ -354,7 +354,7 @@ class StatsIssueController extends PKPBaseController
             return response()->json(['error' => $result], Response::HTTP_BAD_REQUEST);
         }
 
-        $statsService = Services::get('issueStats'); /** @var \APP\services\StatsIssueService $statsService */
+        $statsService = app()->get('issueStats'); /** @var \APP\services\StatsIssueService $statsService */
         $data = $statsService->getTimeline($allowedParams['timelineInterval'], $allowedParams);
         return response()->json($data, Response::HTTP_OK);
     }
@@ -399,7 +399,7 @@ class StatsIssueController extends PKPBaseController
                     } elseif (!is_array($value)) {
                         $value = [$value];
                     }
-                    $returnParams[$requestParam] = array_map('intval', $value);
+                    $returnParams[$requestParam] = array_map(intval(...), $value);
                     break;
             }
         }

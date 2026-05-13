@@ -219,16 +219,14 @@ class MetricsMigration extends \PKP\migration\Migration
             $table->integer('metric_unique');
 
             $table->index(['context_id', 'submission_id'], 'msgd_context_id_submission_id');
-            switch (DB::getDriverName()) {
-                case 'mysql':
+            match (DB::getDriverName()) {
+                'mysql', 'mariadb' =>
                     // See "Create a database table" here: https://db-ip.com/db/format/ip-to-city-lite/csv.html
                     // where city is defined as varchar(80)
-                    $table->unique([DB::raw('load_id, context_id, submission_id, country, region, city(80), date')], 'msgd_uc_load_context_submission_c_r_c_date');
-                    break;
-                case 'pgsql':
-                    $table->unique(['load_id', 'context_id', 'submission_id', 'country', 'region', 'city', 'date'], 'msgd_uc_load_context_submission_c_r_c_date');
-                    break;
-            }
+                    $table->unique([DB::raw('load_id, context_id, submission_id, country, region, city(80), date')], 'msgd_uc_load_context_submission_c_r_c_date'),
+                'pgsql' =>
+                    $table->unique(['load_id', 'context_id', 'submission_id', 'country', 'region', 'city', 'date'], 'msgd_uc_load_context_submission_c_r_c_date')
+            };
         });
 
         Schema::create('metrics_submission_geo_monthly', function (Blueprint $table) {
@@ -251,16 +249,14 @@ class MetricsMigration extends \PKP\migration\Migration
             $table->integer('metric_unique');
 
             $table->index(['context_id', 'submission_id'], 'msgm_context_id_submission_id');
-            switch (DB::getDriverName()) {
-                case 'mysql':
+            match (DB::getDriverName()) {
+                'mysql', 'mariadb' =>
                     // See "Create a database table" here: https://db-ip.com/db/format/ip-to-city-lite/csv.html
                     // where city is defined as varchar(80)
-                    $table->unique([DB::raw('context_id, submission_id, country, region, city(80), month')], 'msgm_uc_context_submission_c_r_c_month');
-                    break;
-                case 'pgsql':
-                    $table->unique(['context_id', 'submission_id', 'country', 'region', 'city', 'month'], 'msgm_uc_context_submission_c_r_c_month');
-                    break;
-            }
+                    $table->unique([DB::raw('context_id, submission_id, country, region, city(80), month')], 'msgm_uc_context_submission_c_r_c_month'),
+                'pgsql' =>
+                    $table->unique(['context_id', 'submission_id', 'country', 'region', 'city', 'month'], 'msgm_uc_context_submission_c_r_c_month')
+            };
         });
 
         // Usage stats total item temporary records
@@ -305,7 +301,7 @@ class MetricsMigration extends \PKP\migration\Migration
             $table->string('city', 255)->default('');
             $table->string('load_id', 50);
 
-            $table->index(['load_id', 'context_id', 'ip'], 'ust_load_id_context_id_ip');
+            $table->index(['load_id', 'context_id', 'ip', 'user_agent', 'canonical_url'], 'ust_load_id_context_id_ip_ua_url');
         });
 
         // Usage stats unique item investigations temporary records
@@ -343,7 +339,7 @@ class MetricsMigration extends \PKP\migration\Migration
             $table->string('city', 255)->default('');
             $table->string('load_id', 50);
 
-            $table->index(['load_id', 'context_id', 'ip'], 'usii_load_id_context_id_ip');
+            $table->index(['load_id', 'context_id', 'ip', 'user_agent'], 'usii_load_id_context_id_ip_ua');
         });
 
         // Usage stats unique item requests temporary records
@@ -380,7 +376,7 @@ class MetricsMigration extends \PKP\migration\Migration
             $table->string('city', 255)->default('');
             $table->string('load_id', 50);
 
-            $table->index(['load_id', 'context_id', 'ip'], 'usir_load_id_context_id_ip');
+            $table->index(['load_id', 'context_id', 'ip', 'user_agent'], 'usir_load_id_context_id_ip_ua');
         });
 
         // Usage stats institution temporary records

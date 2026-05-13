@@ -20,6 +20,7 @@ use APP\facades\Repo;
 use APP\submission\reviewer\form\ReviewerReviewStep3Form;
 use APP\submission\Submission;
 use PKP\core\PKPRequest;
+use PKP\invitation\core\enums\InvitationAction;
 use PKP\pages\reviewer\PKPReviewerHandler;
 use PKP\security\authorization\SubmissionAccessPolicy;
 use PKP\security\Role;
@@ -60,12 +61,13 @@ class ReviewerHandler extends PKPReviewerHandler
         if ($context->getData('reviewerAccessKeysEnabled')) {
             $accessKeyCode = $request->getUserVar('key');
             if ($accessKeyCode) {
-                $keyHash = md5($accessKeyCode);
-
-                $invitation = Repo::invitation()->getBOByKeyHash($keyHash);
+                $invitation = Repo::invitation()
+                    ->getByKey($accessKeyCode);
 
                 if (isset($invitation)) {
-                    $invitation->acceptHandle();
+                    $invitationHandler = $invitation->getInvitationActionRedirectController();
+                    $invitationHandler->preRedirectActions(InvitationAction::ACCEPT);
+                    $invitationHandler->acceptHandle($request);
                 }
             }
         }

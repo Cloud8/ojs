@@ -60,7 +60,7 @@
 	// Modify the Chart.js display options used by UsageStats plugin
 	document.addEventListener('usageStatsChartOptions.pkp', function(e) {
 		e.chartOptions.elements.line.backgroundColor = 'rgba(0, 122, 178, 0.6)';
-		e.chartOptions.elements.rectangle.backgroundColor = 'rgba(0, 122, 178, 0.6)';
+		e.chartOptions.elements.bar.backgroundColor = 'rgba(0, 122, 178, 0.6)';
 	});
 
 	// Toggle display of consent checkboxes in site-wide registration
@@ -98,7 +98,7 @@
 	$('#reviewerOptinGroup input').on('click', reviewerInterestsToggle);
 
 	var swiper = new Swiper('.swiper', {
-		ally: {
+		a11y: {
 			prevSlideMessage: pkpDefaultThemeI18N.prevSlide,
 			nextSlideMessage: pkpDefaultThemeI18N.nextSlide,
 		},

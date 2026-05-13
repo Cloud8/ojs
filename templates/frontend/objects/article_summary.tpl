@@ -8,7 +8,6 @@
  * @brief View of an Article summary which is shown within a list of articles.
  *
  * @uses $article Article The article
- * @uses $authorUserGroups Traversible The set of author user groups
  * @uses $hasAccess bool Can this user access galleys for this context? The
  *       context may be an issue or an article
  * @uses $showDatePublished bool Show the date this article was published?
@@ -25,7 +24,7 @@
 	{assign var="heading" value="h2"}
 {/if}
 
-{if (!$section.hideAuthor && $publication->getData('hideAuthor') == \APP\submission\Submission::AUTHOR_TOC_DEFAULT) || $publication->getData('hideAuthor') == \APP\submission\Submission::AUTHOR_TOC_SHOW}
+{if (!$section.hideAuthor && $publication->getData('hideAuthor') == APP\submission\Submission::AUTHOR_TOC_DEFAULT) || $publication->getData('hideAuthor') == APP\submission\Submission::AUTHOR_TOC_SHOW}
 	{assign var="showAuthor" value=true}
 {/if}
 
@@ -65,7 +64,7 @@
 	<div class="meta">
 		{if $showAuthor}
 		<div class="authors">
-			{$publication->getAuthorString($authorUserGroups)|escape}
+			{$publication->getAuthorString()|escape}
 		</div>
 		{/if}
 
@@ -85,16 +84,16 @@
 
 	{if !$hideGalleys}
 		<ul class="galleys_links">
-			{foreach from=$article->getGalleys() item=galley}
+			{foreach from=$publication->getData('galleys') item=galley}
 				{if $primaryGenreIds}
 					{assign var="file" value=$galley->getFile()}
-					{if !$galley->getRemoteUrl() && !($file && in_array($file->getGenreId(), $primaryGenreIds))}
+					{if !$galley->getData('urlRemote') && !($file && in_array($file->getGenreId(), $primaryGenreIds))}
 						{continue}
 					{/if}
 				{/if}
 				<li>
 					{assign var="hasArticleAccess" value=$hasAccess}
-					{if $currentContext->getSetting('publishingMode') == \APP\journal\Journal::PUBLISHING_MODE_OPEN || $publication->getData('accessStatus') == \APP\submission\Submission::ARTICLE_ACCESS_OPEN}
+					{if $currentContext->getSetting('publishingMode') == APP\journal\Journal::PUBLISHING_MODE_OPEN || $publication->getData('accessStatus') == APP\submission\Submission::ARTICLE_ACCESS_OPEN}
 						{assign var="hasArticleAccess" value=1}
 					{/if}
 					{assign var="id" value="article-{$article->getId()}-galley-{$galley->getId()}"}

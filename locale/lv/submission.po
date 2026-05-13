@@ -1,7 +1,7 @@
 # Ieva Tiltina <pastala@gmail.com>, 2023, 2024.
 msgid ""
 msgstr ""
-"PO-Revision-Date: 2024-01-15 18:09+0000\n"
+"PO-Revision-Date: 2024-02-23 14:58+0000\n"
 "Last-Translator: Ieva Tiltina <pastala@gmail.com>\n"
 "Language-Team: Latvian <http://translate.pkp.sfu.ca/projects/ojs/submission/"
 "lv/>\n"
@@ -26,7 +26,7 @@ msgid "submission.submit.newSubmissionMultiple"
 msgstr "Sākt jaunu materiāla iesniegšanu"
 
 msgid "submission.submit.newSubmissionSingle"
-msgstr "Jauns iesniegtais materiāls"
+msgstr "Jauna materiāla iesniegšana"
 
 msgid "submission.submit.noContext"
 msgstr "Šī iesniegtā materiāla žurnālu neizdevās atrast."
@@ -220,6 +220,7 @@ msgstr "Atcelt publicēšanu"
 msgid "publication.unpublish.confirm"
 msgstr "Vai tiešām nevēlaties, lai tas tiktu publicēts?"
 
+#, fuzzy
 msgid "submission.queries.production"
 msgstr "Izstrādes apspriedes"
 
@@ -247,8 +248,8 @@ msgstr ""
 
 msgid "doi.submission.incorrectContext"
 msgstr ""
-"Nevar izveidot DOI šādam materiālam: {$pubObjectTitle}. Tas nepastāv "
-"pašreizējā žurnāla kontekstā."
+"Nevar izveidot DOI šādam materiālam: {$pubObjectTitle}. Tas nepastāv jaunākā "
+"žurnāla kontekstā."
 
 msgid "submission.layout.viewGalley"
 msgstr "Saliktņa skatīšana"
@@ -269,7 +270,7 @@ msgstr ""
 
 msgid "submission.wizard.sectionClosed.message"
 msgstr ""
-"{$contextName} nepieņem iesniegumus sadaļā {$section}. Ja jums ir "
+"Žurnāls {$contextName} nepieņem materiālus sadaļā {$section}. Ja jums ir "
 "nepieciešama palīdzība, lai atgūtu savu iesniegto materiālu, lūdzu, "
 "sazinieties ar <a href='mailto:{$email}'>{$name}</a>."
 
@@ -280,7 +281,7 @@ msgid "submission.sectionRestrictedToEditors"
 msgstr "Šajā sadaļā drīkst iesniegt tikai redakcijas darbinieki."
 
 msgid "submission.submit.form.contributorRoleRequired"
-msgstr "Lūdzu, izvēlēties ieguldītāja lomu."
+msgstr "Lūdzu, izvēlēties līdzautora lomu."
 
 msgid "submission.submit.form.authorRequired"
 msgstr "Nepieciešams vismaz viens autors."
@@ -351,7 +352,7 @@ msgstr ""
 "sazināsies."
 
 msgid "submission.submit.contributorRole"
-msgstr "Ieguldītāja loma"
+msgstr "Līdzautora loma"
 
 msgid "grid.issueEntry.availableGalley.title"
 msgstr "Formāta apstiprināšana"

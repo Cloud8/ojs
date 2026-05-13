@@ -29,7 +29,7 @@ use PKP\core\PKPRequest;
 use PKP\db\DAORegistry;
 use PKP\security\authorization\SubmissionAccessPolicy;
 use PKP\security\Role;
-use PKP\stageAssignment\StageAssignmentDAO;
+use PKP\stageAssignment\StageAssignment;
 
 class BackendSubmissionsController extends \PKP\API\v1\_submissions\PKPBackendSubmissionsController
 {
@@ -76,13 +76,14 @@ class BackendSubmissionsController extends \PKP\API\v1\_submissions\PKPBackendSu
         $context = $request->getContext();
         $submission = $this->getAuthorizedContextObject(Application::ASSOC_TYPE_SUBMISSION);
 
-        if (!$submission || !$context || $context->getId() != $submission->getContextId()) {
+        if (!$submission || !$context || $context->getId() != $submission->getData('contextId')) {
             return response()->json([
                 'error' => __('api.404.resourceNotFound')
             ], Response::HTTP_NOT_FOUND);
         }
 
-        $paymentManager = Application::getPaymentManager($context);
+        /** @var \APP\payment\ojs\OJSPaymentManager $paymentManager */
+        $paymentManager = Application::get()->getPaymentManager($context);
         $publicationFeeEnabled = $paymentManager->publicationEnabled();
         if (!$publicationFeeEnabled) {
             return response()->json([
@@ -137,16 +138,18 @@ class BackendSubmissionsController extends \PKP\API\v1\_submissions\PKPBackendSu
                 }
 
                 // Record a fulfilled payment.
-                $stageAssignmentDao = DAORegistry::getDAO('StageAssignmentDAO'); /** @var StageAssignmentDAO $stageAssignmentDao */
-                $submitterAssignments = $stageAssignmentDao->getBySubmissionAndRoleIds($submission->getId(), [Role::ROLE_ID_AUTHOR]);
-                $submitterAssignment = $submitterAssignments->next();
+                // Replaces StageAssignmentDAO::getBySubmissionAndRoleIds
+                $submitterAssignment = StageAssignment::withSubmissionIds([$submission->getId()])
+                    ->withRoleIds([Role::ROLE_ID_AUTHOR])
+                    ->first();
+
                 $queuedPayment = $paymentManager->createQueuedPayment(
                     $request,
                     OJSPaymentManager::PAYMENT_TYPE_PUBLICATION,
-                    $submitterAssignment->getUserId(),
+                    $submitterAssignment->userId,
                     $submission->getId(),
-                    $context->getSetting('publicationFee'),
-                    $context->getSetting('currency')
+                    $context->getData('publicationFee'),
+                    $context->getData('currency')
                 );
                 $paymentManager->queuePayment($queuedPayment);
                 $paymentManager->fulfillQueuedPayment($request, $queuedPayment, 'Waiver');
@@ -172,13 +175,13 @@ class BackendSubmissionsController extends \PKP\API\v1\_submissions\PKPBackendSu
 
         if (isset($queryParams['issueIds'])) {
             $collector->filterByIssueIds(
-                array_map('intval', paramToArray($queryParams['issueIds']))
+                array_map(intval(...), paramToArray($queryParams['issueIds']))
             );
         }
 
         if (isset($queryParams['sectionIds'])) {
             $collector->filterBySectionIds(
-                array_map('intval', paramToArray($queryParams['sectionIds']))
+                array_map(intval(...), paramToArray($queryParams['sectionIds']))
             );
         }
 

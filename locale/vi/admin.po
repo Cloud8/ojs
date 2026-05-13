@@ -1,9 +1,11 @@
 # Bùi Văn Khôi <buivankhoi@gmail.com>, 2022.
 # Đoàn Dự <doandu2520@yopmail.com>, 2024.
+# Thuan Huynh <verypro.vn@gmail.com>, 2024, 2025.
+# dat a <tetra.dragon197@gmail.com>, 2024.
 msgid ""
 msgstr ""
-"PO-Revision-Date: 2024-01-22 08:54+0000\n"
-"Last-Translator: Đoàn Dự <doandu2520@yopmail.com>\n"
+"PO-Revision-Date: 2025-05-04 04:23+0000\n"
+"Last-Translator: Thuan Huynh <verypro.vn@gmail.com>\n"
 "Language-Team: Vietnamese <http://translate.pkp.sfu.ca/projects/ojs/admin/vi/"
 ">\n"
 "Language: vi\n"
@@ -168,14 +170,14 @@ msgstr "Thông báo truy cập mở"
 msgid "admin.scheduledTask.reviewReminder"
 msgstr "Nhắc nhở phản biện"
 
-msgid "admin.scheduledTask.usageStatsLoader.invalidLogEntry.issueId"
+msgid "admin.job.processLogFile.invalidLogEntry.issueId"
 msgstr "ID số tạp chí không phải số nguyên."
 
-msgid "admin.scheduledTask.usageStatsLoader.invalidLogEntry.issueGalleyId"
+msgid "admin.job.processLogFile.invalidLogEntry.issueGalleyId"
 msgstr "ID kho số tạp chí không phải số nguyên."
 
 msgid ""
-"admin.scheduledTask.usageStatsLoader.invalidLogEntry.issueAssocTypeNoMatch"
+"admin.job.processLogFile.invalidLogEntry.issueAssocTypeNoMatch"
 msgstr ""
 
 msgid "admin.settings.enableBulkEmails.description"
@@ -256,3 +258,7 @@ msgstr ""
 
 msgid "admin.settings.statistics.sushiPlatform.isSiteSushiPlatform"
 msgstr "Sử dụng site như nền tảng cho mọi tạp chí."
+
+msgid ""
+"admin.scheduledTask.usageStatsLoader.invalidLogEntry.issueAssocTypeNoMatch"
+msgstr "ID số tạp chí không khớp với ID liên kết."

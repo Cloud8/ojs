@@ -23,6 +23,7 @@ use APP\template\TemplateManager;
 use Exception;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Mail;
+use PKP\components\forms\context\PKPPaymentSettingsForm;
 use PKP\components\forms\FormComponent;
 use PKP\db\DAORegistry;
 use PKP\form\Form;
@@ -82,8 +83,7 @@ class ManualPaymentPlugin extends PaymethodPlugin
      */
     public function addSettings($hookName, $form)
     {
-        import('lib.pkp.classes.components.forms.context.PKPPaymentSettingsForm'); // Load constant
-        if ($form->id !== FORM_PAYMENT_SETTINGS) {
+        if ($form->id !== PKPPaymentSettingsForm::FORM_PAYMENT_SETTINGS) {
             return;
         }
 
@@ -145,7 +145,7 @@ class ManualPaymentPlugin extends PaymethodPlugin
         }
 
         $paymentForm = new Form($this->getTemplateResource('paymentForm.tpl'));
-        $paymentManager = Application::getPaymentManager($context);
+        $paymentManager = Application::get()->getPaymentManager($context);
         $paymentForm->setData([
             'itemName' => $paymentManager->getPaymentName($queuedPayment),
             'itemAmount' => $queuedPayment->getAmount() > 0 ? $queuedPayment->getAmount() : null,
@@ -192,7 +192,7 @@ class ManualPaymentPlugin extends PaymethodPlugin
                 Mail::send($mailable);
 
                 $templateMgr->assign([
-                    'currentUrl' => $request->url(null, null, 'payment', 'plugin', ['notify', $queuedPaymentId]),
+                    'currentUrl' => $request->url(null, 'payment', 'plugin', ['notify', $queuedPaymentId]),
                     'pageTitle' => 'plugins.paymethod.manual.paymentNotification',
                     'message' => 'plugins.paymethod.manual.notificationSent',
                     'backLink' => $queuedPayment->getRequestUrl(),
@@ -238,8 +238,4 @@ class ManualPaymentPlugin extends PaymethodPlugin
 
         return false;
     }
-}
-
-if (!PKP_STRICT_MODE) {
-    class_alias('\APP\plugins\paymethod\manual\ManualPaymentPlugin', '\ManualPaymentPlugin');
 }
